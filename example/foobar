@@ -1,0 +1,5 @@
+# an example of an input file for a simulation program
+
+steps = 10000
+T = 1.5
+Activity = 0.1
