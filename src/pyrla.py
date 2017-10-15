@@ -34,6 +34,7 @@ import shutil
 from time import sleep
 # used to process mathematical expressions
 from math import *
+from twisted.protocols import stateful
 
 MAX_STATES = 100000
 
@@ -277,6 +278,41 @@ class ExpressionMultipleKey(MultipleKey, ExpressionKey):
     def expand(self):
         ExpressionKey.expand(self)
         self.expand_complex_math()
+        
+        
+class KeyModifier(object):
+    def __init__(self, key, value, conditions):
+        self.key = key
+        self.value = value
+        
+        if value.__class__.__name__ != BaseKey.__name__:
+            Logger.log("Key modifiers must be simple keys (found while parsing the '%s' modifier)" % key, Logger.CRITICAL)
+            exit(1)
+        
+        self._parse_conditions(conditions)
+        
+    def _parse_conditions(self, conditions):
+        self.conditions = {}
+        for cond in conditions.split(","):
+            key, value = [x.strip() for x in cond.partition("=")[0:3:2]]
+            if key == self.key:
+                Logger.log("A modifier for the key '%s' contains a condition based on itself" % key, Logger.WARNING)
+            self.conditions[key] = value
+            
+    def applies_to(self, state):
+        for cond_key, cond_value in self.conditions.iteritems():
+            if cond_key in state:
+                if cond_value != str(state[cond_key]):
+                    return False
+            else:
+                Logger.log("A modifier for the key '%s' contains a condition key '%s' which has not been defined" % (self.key, cond_key), Logger.WARNING)
+                return False
+            
+        return True
+    
+    def apply(self, state):
+        self.value.expand()
+        state[self.value.key] = self.value()
 
 
 class InputParser(object):
@@ -291,7 +327,8 @@ class InputParser(object):
                        MultipleKey("JOB_ID", "-1"),
                        BaseKey("BASE_DIR", os.getcwd())
                        ]
-
+        self.modifiers = []
+        
         if not os.path.isfile(inp):
             Logger.log("Input file '%s' not found" % inp, Logger.CRITICAL)
             exit(1)
@@ -331,6 +368,11 @@ class InputParser(object):
                 if self.key(bk).__class__.__name__ != BaseKey.__name__:
                     Logger.log("The key '%s' may not be a list nor contain expressions" % bk, Logger.CRITICAL)
                     exit(1)
+                    
+        # check that there are no modifiers associated to undefined keys 
+        for mod in self.modifiers:
+            if mod.key not in self.keys:
+                Logger.log("There is a modifier for the undefined key '%s'" % mod.key, Logger.WARNING)
 
 
     def has_key(self, key):
@@ -366,13 +408,20 @@ class InputParser(object):
                     Logger.log("'%s' is a protected keyword and cannot be used as a key" % key, Logger.CRITICAL)
                     exit(1)
                     
-                if key in self.keys:
-                    Logger.log("Key '%s' is defined more than once, I'll use the first definition only (trashing '%s')"
-                               % (key, my_list[2].strip()), Logger.WARNING)
-                    return
-
-                self.keys.append(key)
-                self.values.append(self.select_right_key(key, my_list[2].strip()))
+                value = my_list[2].strip()
+                # if the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
+                if "@@" in my_list[2]:
+                    rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
+                    real_value = self.select_right_key(key, rhs)
+                    self.modifiers.append(KeyModifier(key, real_value, conditions))
+                else:
+                    if key in self.keys:
+                        Logger.log("Key '%s' is defined more than once, I'll keep the first definition found, thereby throwing away '%s'"
+                                   % (key, my_list[2].strip()), Logger.WARNING)
+                        return
+    
+                    self.keys.append(key)
+                    self.values.append(self.select_right_key(key, value))
 
     def select_right_key(self, key, value):
         if re.search(ExpressionMultipleKey.RE, value) != None:
@@ -561,8 +610,9 @@ class Job(threading.Thread):
 
 
 class StateFactory(object):
-    def __init__(self, values):
+    def __init__(self, values, modifiers):
         self.values = list(values)
+        self.modifiers = list(modifiers)
         self.last_val = len(self.values) - 1
         self.changing_key = self.last_val
         self.max_changed = self.last_val
@@ -604,11 +654,17 @@ class StateFactory(object):
     def get_state_dict(self):
         state = {}
 
+        # first we generate the default state dictionary
         for v in self.values:
             if v.key == "JOB_ID":
                 v.raw_value = str(self.current_id)
             v.expand()
             state[v.key] = v()
+            
+        # and then we apply the modifiers
+        for mod in self.modifiers:
+            if mod.applies_to(state):
+                mod.apply(state)
 
         return state
 
@@ -702,7 +758,7 @@ class Launcher(object):
                 if toprint not in formatted_basekeys: print toprint
 
     def launch(self, opts):
-        state = StateFactory(self.inp_parser.values)
+        state = StateFactory(self.inp_parser.values, self.inp_parser.modifiers)
 
         while state.set_next() != False:
             self.states.append(state.get_state_dict())
