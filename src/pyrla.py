@@ -34,7 +34,6 @@ import shutil
 from time import sleep
 # used to process mathematical expressions
 from math import *
-from twisted.protocols import stateful
 
 MAX_STATES = 100000
 
@@ -53,14 +52,48 @@ class Logger():
         if level < Logger.debug_level: return
 
         print "%s: %s" % (Logger.messages[level], msg)
-
-
+        
+        
+class KeyModifier(object):
+    def __init__(self, modified_key, conditions):
+        self.modified_key = modified_key
+        self.printed_condition_warnings = []
+        
+        self._parse_conditions(conditions)
+        
+    def _parse_conditions(self, conditions):
+        self.conditions = {}
+        for cond in conditions.split(","):
+            key, value = [x.strip() for x in cond.partition("=")[0:3:2]]
+            if key == self.modified_key.key:
+                Logger.log("A modifier for the key '%s' contains a condition based on itself" % key, Logger.WARNING)
+            self.conditions[key] = value
+            
+    def applies_to(self, other_keys, other_values):
+        for cond_key, cond_value in self.conditions.iteritems():
+            if cond_key in other_keys:
+                if cond_value != other_values[other_keys.index(cond_key)]():
+                    return False
+            else:
+                # we do this to avoid printing the same warning more than once
+                if cond_key not in self.printed_condition_warnings:
+                    Logger.log("A modifier for the key '%s' contains the undefined condition key '%s'" % (self.modified_key.key, cond_key), Logger.WARNING)
+                    self.printed_condition_warnings.append(cond_key)
+                    return False
+            
+        return True
+    
+    def value(self):
+        self.modified_key.expand()
+        return self.modified_key()
+        
+        
 class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
                     "Times", "InputSeparator", "Exclusive", "SwapSUS", "LastFile")
 
-    def __init__(self, key, value):
+    def __init__(self, key, value, other_keys, other_values):
         self.key = key
         self.raw_value = value
         if self.raw_value[0] == '"' and self.raw_value[-1] == '"':
@@ -68,6 +101,14 @@ class BaseKey(object):
         self.value = self.raw_value
         # special keys (aka keywords like Input, DirectoryStructure, ecc) need to be handled in a different way
         self.special = (self.key in BaseKey.SPECIAL_KEYS)
+        
+        self.other_keys = other_keys
+        self.other_values = other_values
+        # TODO: make it a set
+        self.depends_on_keys = []
+        self.modifiers = []
+
+        self.compute_dependencies()
 
     def __cmp__(self, other):
         if other.depends_on(self.key): return - 1
@@ -84,11 +125,37 @@ class BaseKey(object):
     def set_next_value(self):
         return False
 
-    def has_dependencies(self):
+    # this is a recursive function: if A depends on B and B depends on C
+    # then A.depends_on(C) will return True
+    def depends_on(self, key):
+        if key in self.depends_on_keys: 
+            return True
+        for k in self.depends_on_keys:
+            try:
+                index = self.other_keys.index(k)
+            except ValueError:
+                Logger.log("Key '%s' (which is expanded by '%s') is not defined" % (k, self.key), Logger.CRITICAL)
+                exit(1)
+                
+            if self.other_values[index].depends_on(self.key):
+                Logger.log("Circular dependency between '%s' and '%s', aborting" % (self.key, k), Logger.CRITICAL)
+                exit(1)
+                
+            if self.other_values[index].depends_on(key): 
+                return True
+
         return False
 
-    def depends_on(self, key):
-        return False
+    def has_dependencies(self):
+        return (len(self.depends_on_keys) > 0)
+
+    def compute_dependencies(self):
+        found_keys = re.findall('\$\([\w\[\]]+\)' , self.raw_value)
+
+        for fk in found_keys:
+            # we get rid of $( and )
+            key = fk[2:-1]
+            self.depends_on_keys.append(key)
 
     def is_iterable(self):
         return (type(self.value) == list)
@@ -98,14 +165,34 @@ class BaseKey(object):
 
     def __repr__(self):
         return "%s: %s = %s" % (self.__class__.__name__, self.key, self())
-
-    def expand(self):
+    
+    def add_modifier(self, modified_key, conditions):
+        new_modifier = KeyModifier(modified_key, conditions)
+        self.modifiers.append(new_modifier)
+        self.depends_on_keys += new_modifier.conditions.keys()
+        
+    def _expand_modifiers(self):
+        modifiers_applied = 0
+        for m in self.modifiers:
+            if m.applies_to(self.other_keys, self.other_values):
+                self.value = m.value()
+                modifiers_applied += 1
+                
+        if modifiers_applied > 1:
+            Logger.log("Multiple modifiers for key '%s' applied" % (self.key), Logger.WARNING)
+                
+        return modifiers_applied > 0
+    
+    def expand_base_value(self):
         self.value = self.raw_value
 
+    def expand(self):
+        if not self._expand_modifiers():
+            self.expand_base_value()
 
 class MultipleKey(BaseKey):
-    def __init__(self, key, value):
-        BaseKey.__init__(self, key, value)
+    def __init__(self, key, value, other_keys, other_values):
+        BaseKey.__init__(self, key, value, other_keys, other_values)
         self.value = []
         self.counter = 0
 
@@ -123,15 +210,17 @@ class MultipleKey(BaseKey):
             self.reset()
             return False
 
-    def expand(self):
-        if self.special == False: self.value = self.raw_value.split()
-        else: self.value = [self.raw_value, ]
+    def expand_base_value(self):
+        if self.special == False: 
+            self.value = self.raw_value.split()
+        else: 
+            self.value = [self.raw_value, ]
         
         
 class FileKey(MultipleKey):
     RE = "^LF"
     
-    def __init__(self, key, value):
+    def __init__(self, key, value, other_keys, other_values):
         filename = value[2:].strip()
         try:
             inp = open(filename, "r")
@@ -141,54 +230,19 @@ class FileKey(MultipleKey):
             Logger.log("File '%s' not found" % filename, Logger.CRITICAL)
             exit(1)
         
-        MultipleKey.__init__(self, key, loaded_value)
-        
-        
+        MultipleKey.__init__(self, key, loaded_value, other_keys, other_values)
+
+
 class ExpressionKey(BaseKey):
     def __init__(self, key, value, other_keys, other_values):
-        BaseKey.__init__(self, key, value)
-        self.other_keys = other_keys
-        self.other_values = other_values
-        self.depends_on_keys = []
-
-        self.get_dependencies()
-
-    # this is a recursive function: if A depends on B and B depends on C
-    # then A.depends_on(C) will return True
-    def depends_on(self, key):
-        if key in self.depends_on_keys: return True
-        for k in self.depends_on_keys:
-            try:
-                index = self.other_keys.index(k)
-            except ValueError:
-                Logger.log("Key '%s' (which is expanded by '%s') is not defined" % (k, self.key), Logger.CRITICAL)
-                exit(1)
-            if self.other_values[index].depends_on(key): return True
-
-        return False
-
-    def has_dependencies(self):
-        return (len(self.depends_on_keys) > 0)
-
-    def get_dependencies(self):
-        found_keys = re.findall('\$\([\w\[\]]+\)' , self.raw_value)
-
-        for fk in found_keys:
-            # we have to get rid of $( and )
-            key = fk[2:-1]
-            self.depends_on_keys.append(key)
+        BaseKey.__init__(self, key, value, other_keys, other_values)
 
     def expand_variables(self):
-        # expand the variables found by get_dependencies
+        # expand the variables found by compute_dependencies
         for key in self.depends_on_keys:
             try:
                 index = self.other_keys.index(key)
-                other_v = self.other_values[index]
-                if other_v.depends_on(self.key):
-                    Logger.log("Circular dependency between '%s' and '%s', aborting" % (self.key, key), Logger.CRITICAL)
-                    exit(1)
-
-                dep_value = other_v()
+                dep_value = self.other_values[index]()
 
                 self.value = self.value.replace("$(%s)" % key, dep_value)
             except Exception as e:
@@ -196,9 +250,9 @@ class ExpressionKey(BaseKey):
 
     def expand_math(self):
         # expand mathematical expressions
-        found_maths = re.findall('\$\{.*?\}' , self.value)
+        math_expressions = re.findall('\$\{.*?\}' , self.value)
 
-        for mk in found_maths:
+        for mk in math_expressions:
             try:
                 # we have to get rid of ${ and }
                 res = eval(mk[2:-1])
@@ -206,12 +260,11 @@ class ExpressionKey(BaseKey):
             except Exception as e:
                 Logger.log("Can't expand mathematical expression '%s' in line '%s' (error: %s)" % (mk, self.raw_value, e), Logger.WARNING)
 
-    def expand(self):
+    def expand_base_value(self):
         self.value = self.raw_value
-
         self.expand_variables()
         self.expand_math()
-
+        
 
 class BashKey(ExpressionKey):
     RE = '^\$b\{.*?\}$'
@@ -219,7 +272,7 @@ class BashKey(ExpressionKey):
     def __init__(self, key, value, other_keys, other_values):
         ExpressionKey.__init__(self, key, value, other_keys, other_values)
         
-    def expand(self):
+    def expand_base_value(self):
         ExpressionKey.expand(self)
         found_keys = re.findall(BashKey.RE , self.value)
         if len(found_keys) != 1:
@@ -235,7 +288,7 @@ class ExpressionMultipleKey(MultipleKey, ExpressionKey):
     RE = "^F([\s]+.*?[\s]+)T([\s]+.*?[\s]+)V([\s]+.*?[\s]*)$"
 
     def __init__(self, key, value, other_keys, other_values):
-        MultipleKey.__init__(self, key, value)
+        MultipleKey.__init__(self, key, value, other_keys, other_values)
         ExpressionKey.__init__(self, key, value, other_keys, other_values)
 
     def expand_complex_math(self):
@@ -275,44 +328,43 @@ class ExpressionMultipleKey(MultipleKey, ExpressionKey):
             old_dist = new_dist
 
 
-    def expand(self):
-        ExpressionKey.expand(self)
+    def expand_base_value(self):
+        ExpressionKey.expand_base_value(self)
         self.expand_complex_math()
         
         
-class KeyModifier(object):
-    def __init__(self, key, value, conditions):
-        self.key = key
-        self.value = value
-        
-        if value.__class__.__name__ != BaseKey.__name__:
-            Logger.log("Key modifiers must be simple keys (found while parsing the '%s' modifier)" % key, Logger.CRITICAL)
-            exit(1)
-        
-        self._parse_conditions(conditions)
-        
-    def _parse_conditions(self, conditions):
-        self.conditions = {}
-        for cond in conditions.split(","):
-            key, value = [x.strip() for x in cond.partition("=")[0:3:2]]
-            if key == self.key:
-                Logger.log("A modifier for the key '%s' contains a condition based on itself" % key, Logger.WARNING)
-            self.conditions[key] = value
+class KeyFactory(object):
+    def _is_base(value):
+        # if the value contains one or more bash-like commands
+        protected_keywords = ["cp", "mv", "if", "then", "fi", "for", "done"]
+        # split the string using spaces and semi-colons as delimiters 
+        tokens = re.split(" |;", value);
+        for token in tokens:
+            if token in protected_keywords:
+                Logger.log("msg", Logger.WARNING)
+                return True
             
-    def applies_to(self, state):
-        for cond_key, cond_value in self.conditions.iteritems():
-            if cond_key in state:
-                if cond_value != str(state[cond_key]):
-                    return False
-            else:
-                Logger.log("A modifier for the key '%s' contains a condition key '%s' which has not been defined" % (self.key, cond_key), Logger.WARNING)
-                return False
+        # if the value is surrounded by quotes or its made of a single word
+        if (value[0] == '"' and value[-1] == '"') or len(value.split()) == 1:
+            return True
             
-        return True
+        return False
+    _is_base = staticmethod(_is_base)
     
-    def apply(self, state):
-        self.value.expand()
-        state[self.value.key] = self.value()
+    def get_key(key, value, other_keys, other_values):
+        if re.search(ExpressionMultipleKey.RE, value) != None:
+            return ExpressionMultipleKey(key, value, other_keys, other_values)
+        elif re.search(FileKey.RE, value) != None:
+            return FileKey(key, value, other_keys, other_values)
+        elif re.search(BashKey.RE, value) != None:
+            return BashKey(key, value, other_keys, other_values)
+        elif "$(" in value or "${" in value:
+            return ExpressionKey(key, value, other_keys, other_values)
+        elif KeyFactory._is_base(value):
+            return BaseKey(key, value, other_keys, other_values)
+        else: 
+            return MultipleKey(key, value, other_keys, other_values)
+    get_key = staticmethod(get_key)
 
 
 class InputParser(object):
@@ -322,11 +374,15 @@ class InputParser(object):
     def __init__(self, inp):
         self.input = inp
         
-        self.keys = ["JOB_ID", "BASE_DIR"]
-        self.values = [
-                       MultipleKey("JOB_ID", "-1"),
-                       BaseKey("BASE_DIR", os.getcwd())
-                       ]
+        self.keys = []
+        self.values = []
+        
+        self.keys.append("JOB_ID")
+        self.values.append(KeyFactory.get_key("JOB_ID", "-1", self.keys, self.values))
+        
+        self.keys.append("BASE_DIR")
+        self.values.append(KeyFactory.get_key("BASE_DIR", os.getcwd(), self.keys, self.values))
+        
         self.modifiers = []
         
         if not os.path.isfile(inp):
@@ -354,11 +410,11 @@ class InputParser(object):
             if not excl: Logger.log("'SwapSUS = True' implies 'Exclusive = True'", Logger.WARNING)
 
             self.keys.append("Exclusive")
-            self.values.append(BaseKey("Exclusive", "True"))
+            self.values.append(KeyFactory.get_key("Exclusive", "True", self.keys, self.values))
 
         if not "Exclusive" in self.keys:
             self.keys.append("Exclusive")
-            self.values.append(BaseKey("Exclusive", "False"))
+            self.values.append(KeyFactory.get_key("Exclusive", "False", self.keys, self.values))
         else:
             ind = self.keys.index("Exclusive")
             self.values[ind].raw_value = self.values[ind].raw_value.capitalize()
@@ -409,11 +465,16 @@ class InputParser(object):
                     exit(1)
                     
                 value = my_list[2].strip()
-                # if the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
+                # check whether the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
                 if "@@" in my_list[2]:
                     rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
-                    real_value = self.select_right_key(key, rhs)
-                    self.modifiers.append(KeyModifier(key, real_value, conditions))
+                    modified_value = KeyFactory.get_key(key, rhs, self.keys, self.values)
+                    if key not in self.keys:
+                        Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported", Logger.CRITICAL)
+                        exit(1)
+                        
+                    # apply the modifier
+                    self.values[self.keys.index(key)].add_modifier(modified_value, conditions)
                 else:
                     if key in self.keys:
                         Logger.log("Key '%s' is defined more than once, I'll keep the first definition found, thereby throwing away '%s'"
@@ -421,22 +482,7 @@ class InputParser(object):
                         return
     
                     self.keys.append(key)
-                    self.values.append(self.select_right_key(key, value))
-
-    def select_right_key(self, key, value):
-        if re.search(ExpressionMultipleKey.RE, value) != None:
-            # if value contains the special keyword F T and V then it's a MultipleExpressionKey
-            return ExpressionMultipleKey(key, value, self.keys, self.values)
-        elif re.search(FileKey.RE, value) != None:
-            return FileKey(key, value)
-        elif re.search(BashKey.RE, value) != None:
-            return BashKey(key, value, self.keys, self.values)
-        elif "$(" in value or "${" in value:
-            return ExpressionKey(key, value, self.keys, self.values)
-        else:
-            if value[0] == '"' and value[-1] == '"' or len(value.split()) == 1:
-                return BaseKey(key, value)
-            else: return MultipleKey(key, value)
+                    self.values.append(KeyFactory.get_key(key, value, self.keys, self.values))
 
 
 # our worker!
@@ -452,7 +498,7 @@ class Job(threading.Thread):
     dir_lock = threading.Lock()
     dir_taken = {}
     dir_taken_lock = threading.Lock()
-    # contains lines of the original copy_from file
+    # contains the lines taken from the original copy_from file
     copy_from_lines = None
 
     def __init__(self, tid, safe):
@@ -621,8 +667,7 @@ class StateFactory(object):
 
         self.order_by_dependencies()
 
-        for i in range(len(self.values)):
-            self.values[i].expand()
+        map(lambda x: x.expand(), self.values)
 
     def get_basekeys(self):
         return [k for k in self.values if type(k) == BaseKey]
@@ -630,9 +675,9 @@ class StateFactory(object):
     # we need to order values by dependency because otherwise we would end up with 
     # unpredictable states
     def order_by_dependencies(self):
-        # first we split the values: nodep will contain keys that not depend on anything
-        # while with dep will contain, in a ordered mode, all the keys that depend on
-        # other keys
+        # we split the values according to their dependencies: nodep will contain 
+        # those keys that do not depend on anything while with dep will contain, in 
+        # a ordered mode, all the keys that depend on other keys
         nodep = []
         withdep = []
         for i in range(len(self.values)):
@@ -647,7 +692,8 @@ class StateFactory(object):
                         found = True
                         break
 
-                if not found: withdep.append(val)
+                if not found: 
+                    withdep.append(val)
 
         self.values = nodep + withdep
 
@@ -660,11 +706,6 @@ class StateFactory(object):
                 v.raw_value = str(self.current_id)
             v.expand()
             state[v.key] = v()
-            
-        # and then we apply the modifiers
-        for mod in self.modifiers:
-            if mod.applies_to(state):
-                mod.apply(state)
 
         return state
 
@@ -747,7 +788,7 @@ class Launcher(object):
         print "Waiting time between job launches: %d" % self.waiting_time
         if self.times > 1: print "Each job will be repeated %d times" % self.times
         if self.copy_from != None:
-            print "Input file will be based on '%s'" % self.copy_from
+            print "The input file will be based on '%s'" % self.copy_from
         print "\nKEYS WITH FIXED VALUES"
         print "\n".join(formatted_basekeys)
 
