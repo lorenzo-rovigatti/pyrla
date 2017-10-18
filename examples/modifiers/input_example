@@ -1,0 +1,19 @@
+################################################################
+# This example is very similar to the one present in the 
+# examples/input/ folder. Here, however, we make use of key 
+# modifiers to select specific values of Delta when certain
+# conditions are met
+################################################################
+
+T = F 0.1 T 0.5 V +0.1
+Activity = 1e-5 2e-5 3e-5
+# This is the general value for Delta
+Delta = 0.1
+# Here we specify that we want a different value of Delta when T == 0.1
+Delta = 0.2 @@ T = 0.1
+# And another value when T == 0.4 and Activity == 2e-5
+Delta = 0.3 @@ T = 0.4, Activity = 2e-5
+Epsilon = ${$(Delta)*2}
+
+Execute = echo "Job N. $(JOB_ID): I'm working at $(T) temperature, $(Delta) Delta and $(Epsilon) Epsilon"
+WaitingTime = 0
