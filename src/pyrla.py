@@ -334,14 +334,14 @@ class ExpressionMultipleKey(MultipleKey, ExpressionKey):
         
         
 class KeyFactory(object):
-    def _is_base(value):
+    def _is_base(key, value):
         # if the value contains one or more bash-like commands
         protected_keywords = ["cp", "mv", "if", "then", "fi", "for", "done"]
         # split the string using spaces and semi-colons as delimiters 
         tokens = re.split(" |;", value);
         for token in tokens:
             if token in protected_keywords:
-                Logger.log("msg", Logger.WARNING)
+                Logger.log("The '%s' key looks like a list of values but contains the token '%s': I will assume it is part of a bash-like command and hence treat it like a single key " % (key, token), Logger.WARNING)
                 return True
             
         # if the value is surrounded by quotes or its made of a single word
@@ -360,7 +360,7 @@ class KeyFactory(object):
             return BashKey(key, value, other_keys, other_values)
         elif "$(" in value or "${" in value:
             return ExpressionKey(key, value, other_keys, other_values)
-        elif KeyFactory._is_base(value):
+        elif KeyFactory._is_base(key, value):
             return BaseKey(key, value, other_keys, other_values)
         else: 
             return MultipleKey(key, value, other_keys, other_values)
