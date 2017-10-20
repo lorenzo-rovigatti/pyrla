@@ -1,8 +1,8 @@
 # pyrla
 
-pyrla allows you to launch parallel processes that execute different commands. 
-You can choose the number of contemporary jobs and their working path, which is automatically constructed. 
-If the command you want to execute takes an input file as argument (or you simply want to have a file in each job's current directory), such an input file can be written on the fly or constructed from an existent input file.
+pyrla allows you to launch parallel processes that execute different commands. Its most common use case is having to run the same command in different directories ordered in a specific hierarchy (e.g. Temperature\_T/Pressure\_P, for several values of P and T). Perhaps the command should be invoked with folder-specific parameters. pyrla makes it easier to automatise this type of repetitive operations without having to resort to bash scripts or similar means. 
+With pyrla, you can choose the number of contemporary jobs and their working path, which can be automatically generated. 
+If the command you want to execute takes an input file as an argument (or if you want to have a bespoke file in each job's current directory), such an input file can be written on the fly or generated from an existent input file.
 	
 ## Usage
 
@@ -24,6 +24,10 @@ pyrla expects a single input file (see [Input file syntax](#input-file-syntax)).
 		start jobs having an id >= n
 	-v, --version
 		show the version of the program 
+
+## Examples
+
+The `examples/` folder contain two subfolders, `input` and `modifiers`. There you will find two commented pyrla input files that can be used as starting points to build your own.
 
 ## Input file syntax
 
