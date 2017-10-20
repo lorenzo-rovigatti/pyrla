@@ -33,7 +33,7 @@ import subprocess
 import shutil
 from time import sleep
 # used to process mathematical expressions
-from math import *
+from math import * #@UnusedWildImport
 
 MAX_STATES = 100000
 
@@ -148,6 +148,9 @@ class BaseKey(object):
 
     def has_dependencies(self):
         return (len(self.depends_on_keys) > 0)
+    
+    def has_modifiers(self):
+        return (len(self.modifiers) > 0)
 
     def compute_dependencies(self):
         found_keys = re.findall('\$\([\w\[\]]+\)' , self.raw_value)
@@ -669,8 +672,8 @@ class StateFactory(object):
 
         map(lambda x: x.expand(), self.values)
 
-    def get_basekeys(self):
-        return [k for k in self.values if type(k) == BaseKey]
+    def get_constant_keys(self):
+        return [k for k in self.values if type(k) == BaseKey and not k.has_modifiers()]
 
     # we need to order values by dependency because otherwise we would end up with 
     # unpredictable states
@@ -778,7 +781,7 @@ class Launcher(object):
             self.waiting_time = float(self.inp_parser.pop("WaitingTime")())
 
     def print_run_info(self, state):
-        basekeys = state.get_basekeys()
+        basekeys = state.get_constant_keys()
         my_format = "\t%s: %s"
         formatted_basekeys = [my_format % (k.key, k.value) for k in basekeys]
 
