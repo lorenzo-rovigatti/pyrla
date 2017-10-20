@@ -858,13 +858,10 @@ def main():
         print "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n"
         exit(1)
 
-    if len(sys.argv) < 2:
-        print_usage()
-        exit(1)
-
     shortArgs = 'dhvrs'
     longArgs = ['debug', 'help', 'version', 'dry-run', 'safe', 'max-states=', 'start-from=', 'end-after=']
-    debug = 1
+    # by default we do not want to output messages marked with the Logger.DEBUG flag
+    Logger.debug_level = 1
     opts = {
             'dry_run' : False,
             'safe' : False,
@@ -877,21 +874,27 @@ def main():
         import getopt
         args, files = getopt.gnu_getopt(sys.argv[1:], shortArgs, longArgs)
         for k in args:
-            if k[0] == '-d' or k[0] == '--debug': debug = 0
-            if k[0] == '-h' or k[0] == '--help': print_usage()
-            if k[0] == '-v' or k[0] == '--version': print_version()
-            if k[0] == '-r' or k[0] == '--dry-run': opts['dry_run'] = True
-            if k[0] == '-s' or k[0] == '--safe': opts['safe'] = True
-            if k[0] == '--start-from': opts['start_from'] = int(k[1])
-            if k[0] == '--end-after': opts['end_after'] = int(k[1])
-            if k[0] == '--max-states': opts['max_states'] = int(k[1])
+            if k[0] == '-d' or k[0] == '--debug': 
+                Logger.debug_level = 0
+            if k[0] == '-h' or k[0] == '--help': 
+                print_usage()
+            if k[0] == '-v' or k[0] == '--version': 
+                print_version()
+            if k[0] == '-r' or k[0] == '--dry-run': 
+                opts['dry_run'] = True
+            if k[0] == '-s' or k[0] == '--safe': 
+                opts['safe'] = True
+            if k[0] == '--start-from': 
+                opts['start_from'] = int(k[1])
+            if k[0] == '--end-after': 
+                opts['end_after'] = int(k[1])
+            if k[0] == '--max-states': 
+                opts['max_states'] = int(k[1])
 
         inp = files[0]
     except Exception as e:
-        print e
+        Logger.log(e, Logger.DEBUG)
         print_usage()
-
-    Logger.debug_level = debug
 
     launcher = Launcher(inp)
     launcher.launch(opts)
