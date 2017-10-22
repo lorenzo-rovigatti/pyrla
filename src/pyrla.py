@@ -276,7 +276,7 @@ class BashKey(ExpressionKey):
         ExpressionKey.__init__(self, key, value, other_keys, other_values)
         
     def expand_base_value(self):
-        ExpressionKey.expand(self)
+        ExpressionKey.expand_base_value(self)
         found_keys = re.findall(BashKey.RE , self.value)
         if len(found_keys) != 1:
             Logger.log("Can't expand variable '%s' in line '%s' (error: bash commands should be enclosed between '$b{' and '}')" % (self.key, self.raw_value), Logger.WARNING)
