@@ -17,13 +17,17 @@ pyrla expects a single input file (see [Input file syntax](#input-file-syntax)).
 	--max-states n
 		set the maximum number of states (jobs) that can be generated. Defaults to 100000
 	-r, --dry-run
-		show a summary of the jobs. Useful for testing input files
+		show a complete summary of the jobs. Useful for testing input files
+	-S, --summarise
+		show a synthetic summary of the run
 	-s, --safe
 		enable safe mode. No files or directory will be overwritten
 	--start-from n
 		start jobs having an id >= n
 	-v, --version
-		show the version of the program 
+		show the version of the program
+	-w, --wait n
+		wait n seconds before starting the jobs (after the parsing of the input file)
 
 ## Examples
 
@@ -55,7 +59,7 @@ The `examples/` folder contain two subfolders, `input` and `modifiers`. There yo
 	* Exclusive: if True, no more than one job per directory can be executed.
 	* SwapSUS: if True and if Times > 1 then pyrla will try to swap SUS configurations between neighbouring particle windows.
 		
-* The following built-in keys that can be used in user-defined keys:
+* The following built-in keys can be used in user-defined keys:
 	* JOB_ID: expands to the current job's id, which is 0 for the first job, 1 for the second, etc.
 	* BASE_DIR: the directory pyrla was launched from.
 	
