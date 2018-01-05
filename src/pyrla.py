@@ -885,6 +885,9 @@ def main():
         import getopt
         args, files = getopt.gnu_getopt(command_line_args, shortArgs, longArgs)
         
+        if len(files) == 0:
+            raise Exception("Mandatory input file missing")
+        
         if len(files) > 1:
             raise Exception("There should be a single input file, found %d" % len(files))
         
@@ -914,8 +917,6 @@ def main():
             raise Exception("Summarise (-S/--summarise) and dry-run (-r/--dry-run) are incompatible")
 
         return opts, files[0]
-        
-            
     try:
         opts, inp = parse_options(sys.argv[1:])
     except Exception as e:
