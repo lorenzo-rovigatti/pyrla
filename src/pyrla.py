@@ -473,7 +473,7 @@ class InputParser(object):
                     rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
                     modified_value = KeyFactory.get_key(key, rhs, self.keys, self.values)
                     if key not in self.keys:
-                        Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported", Logger.CRITICAL)
+                        Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported" % key, Logger.CRITICAL)
                         exit(1)
                         
                     # apply the modifier
@@ -627,7 +627,7 @@ class Job(threading.Thread):
                         last_here = os.path.join(self.state['DirectoryStructure'], last)
                         last_next = os.path.join(self.state['NextDirectoryStructure'], last)
 
-                        # this fails if the directory structure has not been setup yet
+                        # this fails if the directory structure has not been set up yet
                         try:
                             swap_log = open(os.path.join(self.state['DirectoryStructure'], "swap_log.dat"), "a")
 
