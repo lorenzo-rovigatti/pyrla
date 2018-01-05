@@ -43,9 +43,10 @@ class Logger():
     DEBUG = 0
     INFO = 1
     WARNING = 2
-    CRITICAL = 3
+    ERROR = 3
+    CRITICAL = 4
 
-    messages = ("DEBUG", "INFO", "WARNING", "CRITICAL")
+    messages = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
     @staticmethod
     def log(msg, level):
@@ -192,6 +193,7 @@ class BaseKey(object):
     def expand(self):
         if not self._expand_modifiers():
             self.expand_base_value()
+
 
 class MultipleKey(BaseKey):
     def __init__(self, key, value, other_keys, other_values):
@@ -780,10 +782,11 @@ class Launcher(object):
         if self.inp_parser.has_key("WaitingTime"):
             self.waiting_time = float(self.inp_parser.pop("WaitingTime")())
 
-    def print_run_info(self, state):
+    def print_run_info(self, state, complete):
         basekeys = state.get_constant_keys()
         my_format = "\t%s: %s"
-        formatted_basekeys = [my_format % (k.key, k.value) for k in basekeys]
+        # the JOB_ID key is different from any other key, as it is considered to be immutable by pyrla but it is not
+        formatted_basekeys = [my_format % (k.key, k.value) for k in basekeys if k.key != "JOB_ID"]
 
         print "\nRUN INFO:"
         print "Number of processes: %d" % self.num_states
@@ -794,12 +797,13 @@ class Launcher(object):
             print "The input file will be based on '%s'" % self.copy_from
         print "\nKEYS WITH FIXED VALUES"
         print "\n".join(formatted_basekeys)
-
-        for i in range(len(self.states)):
-            print "\nJOB %d" % i
-            for k, v in self.states[i].iteritems():
-                toprint = my_format % (k, v)
-                if toprint not in formatted_basekeys: print toprint
+        
+        if complete:
+            for i in range(len(self.states)):
+                print "\nJOB %d" % i
+                for k, v in self.states[i].iteritems():
+                    to_print = my_format % (k, v)
+                    if to_print not in formatted_basekeys: print to_print
 
     def launch(self, opts):
         state = StateFactory(self.inp_parser.values, self.inp_parser.modifiers)
@@ -818,9 +822,13 @@ class Launcher(object):
         if self.max_jobs > self.num_states or self.max_jobs == 0:
             self.max_jobs = self.num_states
 
-        if opts['dry_run'] == True:
-            self.print_run_info(state)
+        if opts['dry_run'] or opts['summarise']:
+            self.print_run_info(state, opts['dry_run'])
             return
+        
+        if opts['wait'] > 0:
+            import time
+            time.sleep(opts['wait'])
 
         if self.copy_from != None:
             Job.copy_from_lines = self.copy_from_lines
@@ -849,6 +857,7 @@ def main():
         print "USAGE:"
         print "\t%s input [-d|--debug] [-h|--help] [-v|--version]" % sys.argv[0]
         print "\t[-r|--dry-run] [-s|--safe] [--max-states N] [--start-from N] [--end-after N]"
+        print "\t[-S\--summarise] [-w\--wait seconds]"
         exit(1)
 
     def print_version():
@@ -857,22 +866,28 @@ def main():
         print "This is free software; see the source for copying conditions.  There is NO"
         print "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n"
         exit(1)
-
-    shortArgs = 'dhvrs'
-    longArgs = ['debug', 'help', 'version', 'dry-run', 'safe', 'max-states=', 'start-from=', 'end-after=']
-    # by default we do not want to output messages marked with the Logger.DEBUG flag
-    Logger.debug_level = 1
-    opts = {
-            'dry_run' : False,
-            'safe' : False,
-            'max_states' : MAX_STATES,
-            'start_from' : 0,
-            'end_after' : None
-            }
-
-    try:
+        
+    def parse_options(command_line_args):
+        shortArgs = 'dhvrsSw:'
+        longArgs = ['debug', 'help', 'version', 'dry-run', 'safe', 'max-states=', 'start-from=', 'end-after=', 'summarise', 'wait=']
+        # by default we do not want to output messages marked with the Logger.DEBUG flag
+        Logger.debug_level = 1
+        opts = {
+                'dry_run' : False,
+                'summarise' : False,
+                'safe' : False,
+                'max_states' : MAX_STATES,
+                'start_from' : 0,
+                'end_after' : None,
+                'wait' : 0
+                }
+    
         import getopt
-        args, files = getopt.gnu_getopt(sys.argv[1:], shortArgs, longArgs)
+        args, files = getopt.gnu_getopt(command_line_args, shortArgs, longArgs)
+        
+        if len(files) > 1:
+            raise Exception("There should be a single input file, found %d" % len(files))
+        
         for k in args:
             if k[0] == '-d' or k[0] == '--debug': 
                 Logger.debug_level = 0
@@ -882,18 +897,29 @@ def main():
                 print_version()
             if k[0] == '-r' or k[0] == '--dry-run': 
                 opts['dry_run'] = True
+            if k[0] == '-S' or k[0] == '--summarise':
+                opts['summarise'] = True
             if k[0] == '-s' or k[0] == '--safe': 
                 opts['safe'] = True
+            if k[0] == '-w' or k[0] == '--wait':
+                opts['wait'] = int(k[1]) 
             if k[0] == '--start-from': 
                 opts['start_from'] = int(k[1])
             if k[0] == '--end-after': 
                 opts['end_after'] = int(k[1])
             if k[0] == '--max-states': 
                 opts['max_states'] = int(k[1])
+                
+        if opts['dry_run'] and opts['summarise']:
+            raise Exception("Summarise (-S/--summarise) and dry-run (-r/--dry-run) are incompatible")
 
-        inp = files[0]
+        return opts, files[0]
+        
+            
+    try:
+        opts, inp = parse_options(sys.argv[1:])
     except Exception as e:
-        Logger.log(e, Logger.DEBUG)
+        Logger.log(e, Logger.ERROR)
         print_usage()
 
     launcher = Launcher(inp)
