@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+    #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
 #   Copyright (C) 2011 Lorenzo Rovigatti
@@ -791,7 +791,7 @@ class Launcher(object):
         print "\nRUN INFO:"
         print "Number of processes: %d" % self.num_states
         print "Contemporary processes: %d" % self.max_jobs
-        print "Waiting time between job launches: %d" % self.waiting_time
+        print "Waiting time between job launches: %f" % self.waiting_time
         if self.times > 1: print "Each job will be repeated %d times" % self.times
         if self.copy_from != None:
             print "The input file will be based on '%s'" % self.copy_from

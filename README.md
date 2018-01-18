@@ -1,6 +1,6 @@
 # pyrla
 
-pyrla allows you to launch parallel processes that execute different commands. Its most common use case is having to run the same command in different directories ordered in a specific hierarchy (e.g. Temperature\_T/Pressure\_P, for several values of P and T). Perhaps the command should be invoked with folder-specific parameters. pyrla makes it easier to automatise this type of repetitive operations without having to resort to bash scripts or similar means. 
+pyrla makes it easy to launch parallel processes that execute different commands. Its most common use case is having to run the same command in different directories ordered in a specific hierarchy (e.g. Temperature\_T/Pressure\_P, for several values of P and T). Perhaps the command should be invoked with folder-specific parameters. pyrla makes it easier to automatise this type of repetitive operations without having to resort to bash scripts or similar means. 
 With pyrla, you can choose the number of contemporary jobs and their working path, which can be automatically generated. 
 If the command you want to execute takes an input file as an argument (or if you want to have a bespoke file in each job's current directory), such an input file can be written on the fly or generated from an existent input file.
 	
@@ -17,11 +17,11 @@ pyrla expects a single input file (see [Input file syntax](#input-file-syntax)).
 	--max-states n
 		set the maximum number of states (jobs) that can be generated. Defaults to 100000
 	-r, --dry-run
-		show a complete summary of the jobs. Useful for testing input files
+		show a complete summary of the jobs that will run. Useful for testing input files
 	-S, --summarise
 		show a synthetic summary of the run
 	-s, --safe
-		enable safe mode. No files or directory will be overwritten
+		enable safe mode. No file or directory will be overwritten
 	--start-from n
 		start jobs having an id >= n
 	-v, --version
