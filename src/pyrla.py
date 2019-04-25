@@ -51,7 +51,8 @@ class Logger():
 
     @staticmethod
     def log(msg, level):
-        if level < Logger.debug_level: return
+        if level < Logger.debug_level: 
+            return
 
         print("%s: %s" % (Logger.messages[level], msg))
         
@@ -71,10 +72,10 @@ class KeyModifier(object):
                 Logger.log("A modifier for the key '%s' contains a condition based on itself" % key, Logger.WARNING)
             self.conditions[key] = value
             
-    def applies_to(self, other_keys, other_values):
+    def applies_to(self, key_value_dict):
         for cond_key, cond_value in self.conditions.items():
-            if cond_key in other_keys:
-                if cond_value != other_values[other_keys.index(cond_key)]():
+            if cond_key in key_value_dict:
+                if cond_value != key_value_dict[cond_key]():
                     return False
             else:
                 # we do this to avoid printing the same warning more than once
@@ -95,7 +96,7 @@ class BaseKey(object):
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
                     "Times", "InputSeparator", "Exclusive", "SwapSUS", "LastFile")
 
-    def __init__(self, key, value, other_keys, other_values):
+    def __init__(self, key, value, key_value_dict):
         self.key = key
         self.raw_value = value
         if self.raw_value[0] == '"' and self.raw_value[-1] == '"':
@@ -104,8 +105,7 @@ class BaseKey(object):
         # special keys (aka keywords like Input, DirectoryStructure, ecc) need to be handled in a different way
         self.special = (self.key in BaseKey.SPECIAL_KEYS)
         
-        self.other_keys = other_keys
-        self.other_values = other_values
+        self.key_value_dict = key_value_dict
         # TODO: make it a set
         self.depends_on_keys = []
         self.modifiers = []
@@ -113,13 +113,17 @@ class BaseKey(object):
         self.compute_dependencies()
 
     def __cmp__(self, other):
-        if other.depends_on(self.key): return - 1
-        elif self.depends_on(other.key): return 1
+        if other.depends_on(self.key): 
+            return - 1
+        elif self.depends_on(other.key): 
+            return 1
         else:
             ih = self.has_dependencies()
             oh = other.has_dependencies()
-            if ih and not oh: return 1
-            elif oh and not ih: return - 1
+            if ih and not oh: 
+                return 1
+            elif oh and not ih: 
+                return -1
 
             return 0
 
@@ -133,17 +137,15 @@ class BaseKey(object):
         if key in self.depends_on_keys: 
             return True
         for k in self.depends_on_keys:
-            try:
-                index = self.other_keys.index(k)
-            except ValueError:
+            if k not in self.key_value_dict:
                 Logger.log("Key '%s' (which is expanded by '%s') is not defined" % (k, self.key), Logger.CRITICAL)
                 exit(1)
                 
-            if self.other_values[index].depends_on(self.key):
+            if self.key_value_dict[k].depends_on(self.key):
                 Logger.log("Circular dependency between '%s' and '%s', aborting" % (self.key, k), Logger.CRITICAL)
                 exit(1)
                 
-            if self.other_values[index].depends_on(key): 
+            if self.key_value_dict[k].depends_on(key): 
                 return True
 
         return False
@@ -179,7 +181,7 @@ class BaseKey(object):
     def _expand_modifiers(self):
         modifiers_applied = 0
         for m in self.modifiers:
-            if m.applies_to(self.other_keys, self.other_values):
+            if m.applies_to(self.key_value_dict):
                 self.value = m.value()
                 modifiers_applied += 1
                 
@@ -197,8 +199,8 @@ class BaseKey(object):
 
 
 class MultipleKey(BaseKey):
-    def __init__(self, key, value, other_keys, other_values):
-        BaseKey.__init__(self, key, value, other_keys, other_values)
+    def __init__(self, key, value, key_value_dict):
+        BaseKey.__init__(self, key, value, key_value_dict)
         self.value = []
         self.counter = 0
 
@@ -226,7 +228,7 @@ class MultipleKey(BaseKey):
 class FileKey(MultipleKey):
     RE = "^LF"
     
-    def __init__(self, key, value, other_keys, other_values):
+    def __init__(self, key, value, key_value_dict):
         filename = value[2:].strip()
         try:
             inp = open(filename, "r")
@@ -236,20 +238,18 @@ class FileKey(MultipleKey):
             Logger.log("File '%s' not found" % filename, Logger.CRITICAL)
             exit(1)
         
-        MultipleKey.__init__(self, key, loaded_value, other_keys, other_values)
+        MultipleKey.__init__(self, key, loaded_value, key_value_dict)
 
 
 class ExpressionKey(BaseKey):
-    def __init__(self, key, value, other_keys, other_values):
-        BaseKey.__init__(self, key, value, other_keys, other_values)
+    def __init__(self, key, value, key_value_dict):
+        BaseKey.__init__(self, key, value, key_value_dict)
 
     def expand_variables(self):
         # expand the variables found by compute_dependencies
         for key in self.depends_on_keys:
             try:
-                index = self.other_keys.index(key)
-                dep_value = self.other_values[index]()
-
+                dep_value = self.key_value_dict[key]()
                 self.value = self.value.replace("$(%s)" % key, dep_value)
             except Exception as e:
                 Logger.log("Can't expand variable '%s' in line '%s' (error: %s)" % (key, self.raw_value, e), Logger.WARNING)
@@ -275,8 +275,8 @@ class ExpressionKey(BaseKey):
 class BashKey(ExpressionKey):
     RE = '^\$b\{.*?\}$'
     
-    def __init__(self, key, value, other_keys, other_values):
-        ExpressionKey.__init__(self, key, value, other_keys, other_values)
+    def __init__(self, key, value, key_value_dict):
+        ExpressionKey.__init__(self, key, value, key_value_dict)
         
     def expand_base_value(self):
         ExpressionKey.expand_base_value(self)
@@ -293,9 +293,9 @@ class BashKey(ExpressionKey):
 class ExpressionMultipleKey(MultipleKey, ExpressionKey):
     RE = "^F([\s]+.*?[\s]+)T([\s]+.*?[\s]+)V([\s]+.*?[\s]*)$"
 
-    def __init__(self, key, value, other_keys, other_values):
-        MultipleKey.__init__(self, key, value, other_keys, other_values)
-        ExpressionKey.__init__(self, key, value, other_keys, other_values)
+    def __init__(self, key, value, key_value_dict):
+        MultipleKey.__init__(self, key, value, key_value_dict)
+        ExpressionKey.__init__(self, key, value, key_value_dict)
 
     def expand_complex_math(self):
         compl_found = re.findall(ExpressionMultipleKey.RE, self.value)[0]
@@ -357,38 +357,38 @@ class KeyFactory(object):
         return False
     _is_base = staticmethod(_is_base)
     
-    def get_key(key, value, other_keys, other_values):
+    def get_key(key, value, key_value_dict):
         if re.search(ExpressionMultipleKey.RE, value) != None:
-            return ExpressionMultipleKey(key, value, other_keys, other_values)
+            return ExpressionMultipleKey(key, value, key_value_dict)
         elif re.search(FileKey.RE, value) != None:
-            return FileKey(key, value, other_keys, other_values)
+            return FileKey(key, value, key_value_dict)
         elif re.search(BashKey.RE, value) != None:
-            return BashKey(key, value, other_keys, other_values)
+            return BashKey(key, value, key_value_dict)
         elif "$(" in value or "${" in value:
-            return ExpressionKey(key, value, other_keys, other_values)
+            return ExpressionKey(key, value, key_value_dict)
         elif KeyFactory._is_base(key, value):
-            return BaseKey(key, value, other_keys, other_values)
+            return BaseKey(key, value, key_value_dict)
         else: 
-            return MultipleKey(key, value, other_keys, other_values)
+            return MultipleKey(key, value, key_value_dict)
     get_key = staticmethod(get_key)
 
 
-class InputParser(collections.UserDict):
+class KeyValueDict(collections.UserDict):
     REQUIRED_BASEKEYS = ("CopyFrom", "ContemporaryJobs")
     PROTECTED_KEYS = ("JOB_ID", "BASE_DIR")
 
-    def __init__(self, inp):
+    def __init__(self, input):
         collections.UserDict.__init__(self)
         
-        self.input = inp
+        self.input = input
         
-        self["JOB_ID"] = KeyFactory.get_key("JOB_ID", "-1", list(self.keys()), list(self.values()))
-        self["BASE_DIR"] = KeyFactory.get_key("BASE_DIR", os.getcwd(), list(self.keys()), list(self.values()))
+        self["JOB_ID"] = KeyFactory.get_key("JOB_ID", "-1", self)
+        self["BASE_DIR"] = KeyFactory.get_key("BASE_DIR", os.getcwd(), self)
         
         self.modifiers = []
         
-        if not os.path.isfile(inp):
-            Logger.log("Input file '%s' not found" % inp, Logger.CRITICAL)
+        if not os.path.isfile(input):
+            Logger.log("Input file '%s' not found" % input, Logger.CRITICAL)
             exit(1)
 
     def check(self):
@@ -413,14 +413,14 @@ class InputParser(collections.UserDict):
             if not excl: 
                 Logger.log("'SwapSUS = True' implies 'Exclusive = True'", Logger.WARNING)
 
-            self["Exclusive"] = KeyFactory.get_key("Exclusive", "True", list(self.keys()), list(self.values()))
+            self["Exclusive"] = KeyFactory.get_key("Exclusive", "True", self)
 
         if not "Exclusive" in self:
-            self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", list(self.keys()), list(self.values()))
+            self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", self)
         else:
             self["Exclusive"].raw_value = self["Exclusive"].raw_value.capitalize()
 
-        for bk in InputParser.REQUIRED_BASEKEYS:
+        for bk in KeyValueDict.REQUIRED_BASEKEYS:
             if bk in self:
                 if self[bk].__class__.__name__ != BaseKey.__name__:
                     Logger.log("The key '%s' may not be a list nor contain expressions" % bk, Logger.CRITICAL)
@@ -448,7 +448,7 @@ class InputParser(collections.UserDict):
                     return
 
                 key = my_list[0].strip()
-                if key in InputParser.PROTECTED_KEYS:
+                if key in KeyValueDict.PROTECTED_KEYS:
                     Logger.log("'%s' is a protected keyword and cannot be used as a key" % key, Logger.CRITICAL)
                     exit(1)
                     
@@ -456,7 +456,7 @@ class InputParser(collections.UserDict):
                 # check whether the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
                 if "@@" in my_list[2]:
                     rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
-                    modified_value = KeyFactory.get_key(key, rhs, list(self.keys()), list(self.values()))
+                    modified_value = KeyFactory.get_key(key, rhs, self)
                     if key not in self:
                         Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported" % key, Logger.CRITICAL)
                         exit(1)
@@ -469,7 +469,7 @@ class InputParser(collections.UserDict):
                                    % (key, my_list[2].strip()), Logger.WARNING)
                         return
     
-                    self[key] = KeyFactory.get_key(key, value, list(self.keys()), list(self.values()))
+                    self[key] = KeyFactory.get_key(key, value, self)
 
 
 # our worker!
@@ -496,7 +496,8 @@ class Job(threading.Thread):
         self.safe = safe
 
     def create_copy_to(self):
-        if "CopyFrom" not in self.state: return
+        if "CopyFrom" not in self.state: 
+            return
 
         sep = self.state["InputSeparator"] if "InputSeparator" in self.state else "="
 
@@ -548,7 +549,8 @@ class Job(threading.Thread):
                 if not os.path.exists(totdir): os.makedirs(totdir)
 
     def copy_objects(self):
-        if "CopyObjects" not in self.state: return
+        if "CopyObjects" not in self.state: 
+            return
 
         objs = self.state['CopyObjects'].split()
 
@@ -568,7 +570,8 @@ class Job(threading.Thread):
     def is_directory_used(self):
         if self.relative_dir in Job.dir_taken:
             return Job.dir_taken[self.relative_dir]
-        else: return False
+        else: 
+            return False
 
     def get_N_from_conf(self, name):
         with open(name) as f:
@@ -712,7 +715,8 @@ class StateFactory(object):
                 else:
                     self.changing_key -= 1
 
-                if self.max_changed < 0 or self.changing_key < 0: return False
+                if self.max_changed < 0 or self.changing_key < 0: 
+                    return False
 
         self.first = False
         return True
@@ -734,7 +738,7 @@ class Launcher(object):
 
         self.times = 1
 
-        self.inp_parser = InputParser(inp)
+        self.inp_parser = KeyValueDict(inp)
         self.inp_parser.parse()
 
         self.get_global_options()
