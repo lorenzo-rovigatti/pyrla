@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 #   Copyright (C) 2011 Lorenzo Rovigatti
@@ -27,10 +27,11 @@
 import sys
 import re
 import threading
-import Queue
+import queue
 import os
 import subprocess
 import shutil
+import collections
 from time import sleep
 # used to process mathematical expressions
 from math import * #@UnusedWildImport
@@ -52,7 +53,7 @@ class Logger():
     def log(msg, level):
         if level < Logger.debug_level: return
 
-        print "%s: %s" % (Logger.messages[level], msg)
+        print("%s: %s" % (Logger.messages[level], msg))
         
         
 class KeyModifier(object):
@@ -71,7 +72,7 @@ class KeyModifier(object):
             self.conditions[key] = value
             
     def applies_to(self, other_keys, other_values):
-        for cond_key, cond_value in self.conditions.iteritems():
+        for cond_key, cond_value in self.conditions.items():
             if cond_key in other_keys:
                 if cond_value != other_values[other_keys.index(cond_key)]():
                     return False
@@ -173,7 +174,7 @@ class BaseKey(object):
     def add_modifier(self, modified_key, conditions):
         new_modifier = KeyModifier(modified_key, conditions)
         self.modifiers.append(new_modifier)
-        self.depends_on_keys += new_modifier.conditions.keys()
+        self.depends_on_keys += list(new_modifier.conditions.keys())
         
     def _expand_modifiers(self):
         modifiers_applied = 0
@@ -372,21 +373,17 @@ class KeyFactory(object):
     get_key = staticmethod(get_key)
 
 
-class InputParser(object):
+class InputParser(collections.UserDict):
     REQUIRED_BASEKEYS = ("CopyFrom", "ContemporaryJobs")
     PROTECTED_KEYS = ("JOB_ID", "BASE_DIR")
 
     def __init__(self, inp):
+        collections.UserDict.__init__(self)
+        
         self.input = inp
         
-        self.keys = []
-        self.values = []
-        
-        self.keys.append("JOB_ID")
-        self.values.append(KeyFactory.get_key("JOB_ID", "-1", self.keys, self.values))
-        
-        self.keys.append("BASE_DIR")
-        self.values.append(KeyFactory.get_key("BASE_DIR", os.getcwd(), self.keys, self.values))
+        self["JOB_ID"] = KeyFactory.get_key("JOB_ID", "-1", list(self.keys()), list(self.values()))
+        self["BASE_DIR"] = KeyFactory.get_key("BASE_DIR", os.getcwd(), list(self.keys()), list(self.values()))
         
         self.modifiers = []
         
@@ -395,58 +392,44 @@ class InputParser(object):
             exit(1)
 
     def check(self):
-        if not "Execute" in self.keys:
+        if not "Execute" in self:
             Logger.log("Mandatory key 'Execute' missing", Logger.CRITICAL)
             exit(1)
 
-        if "SwapSUS" in self.keys:
-            if not "DirectoryStructure" in self.keys:
+        if "SwapSUS" in self:
+            if not "DirectoryStructure" in self:
                 Logger.log("Mandatory key 'DirectoryStructure' is missing", Logger.CRITICAL)
                 exit(1)
 
-            if not "LastFile" in self.keys:
+            if not "LastFile" in self:
                 Logger.log("Mandatory key 'LastFile' is missing", Logger.CRITICAL)
                 exit(1)
 
-            if "Exclusive" in self.keys:
+            if "Exclusive" in self:
                 excl = self.pop("Exclusive")
-            else: excl = False
+            else: 
+                excl = False
 
-            if not excl: Logger.log("'SwapSUS = True' implies 'Exclusive = True'", Logger.WARNING)
+            if not excl: 
+                Logger.log("'SwapSUS = True' implies 'Exclusive = True'", Logger.WARNING)
 
-            self.keys.append("Exclusive")
-            self.values.append(KeyFactory.get_key("Exclusive", "True", self.keys, self.values))
+            self["Exclusive"] = KeyFactory.get_key("Exclusive", "True", list(self.keys()), list(self.values()))
 
-        if not "Exclusive" in self.keys:
-            self.keys.append("Exclusive")
-            self.values.append(KeyFactory.get_key("Exclusive", "False", self.keys, self.values))
+        if not "Exclusive" in self:
+            self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", list(self.keys()), list(self.values()))
         else:
-            ind = self.keys.index("Exclusive")
-            self.values[ind].raw_value = self.values[ind].raw_value.capitalize()
+            self["Exclusive"].raw_value = self["Exclusive"].raw_value.capitalize()
 
         for bk in InputParser.REQUIRED_BASEKEYS:
-            if self.has_key(bk):
-                if self.key(bk).__class__.__name__ != BaseKey.__name__:
+            if bk in self:
+                if self[bk].__class__.__name__ != BaseKey.__name__:
                     Logger.log("The key '%s' may not be a list nor contain expressions" % bk, Logger.CRITICAL)
                     exit(1)
                     
         # check that there are no modifiers associated to undefined keys 
         for mod in self.modifiers:
-            if mod.key not in self.keys:
+            if mod.key not in self:
                 Logger.log("There is a modifier for the undefined key '%s'" % mod.key, Logger.WARNING)
-
-
-    def has_key(self, key):
-        return key in self.keys
-
-    def key(self, key):
-        ind = self.keys.index(key)
-        return self.values[ind]
-
-    def pop(self, key):
-        ind = self.keys.index(key)
-        self.keys.pop(ind)
-        return self.values.pop(ind)
 
     def parse(self):
         with open(self.input) as f:
@@ -473,21 +456,20 @@ class InputParser(object):
                 # check whether the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
                 if "@@" in my_list[2]:
                     rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
-                    modified_value = KeyFactory.get_key(key, rhs, self.keys, self.values)
-                    if key not in self.keys:
+                    modified_value = KeyFactory.get_key(key, rhs, list(self.keys()), list(self.values()))
+                    if key not in self:
                         Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported" % key, Logger.CRITICAL)
                         exit(1)
                         
                     # apply the modifier
-                    self.values[self.keys.index(key)].add_modifier(modified_value, conditions)
+                    self[key].add_modifier(modified_value, conditions)
                 else:
-                    if key in self.keys:
+                    if key in self:
                         Logger.log("Key '%s' is defined more than once, I'll keep the first definition found, thereby throwing away '%s'"
                                    % (key, my_list[2].strip()), Logger.WARNING)
                         return
     
-                    self.keys.append(key)
-                    self.values.append(KeyFactory.get_key(key, value, self.keys, self.values))
+                    self[key] = KeyFactory.get_key(key, value, list(self.keys()), list(self.values()))
 
 
 # our worker!
@@ -499,7 +481,7 @@ class Job(threading.Thread):
         def __str__(self):
             return self.value
 
-    queue = Queue.Queue(1)
+    queue = queue.Queue(1)
     dir_lock = threading.Lock()
     dir_taken = {}
     dir_taken_lock = threading.Lock()
@@ -672,7 +654,8 @@ class StateFactory(object):
 
         self.order_by_dependencies()
 
-        map(lambda x: x.expand(), self.values)
+        for v in self.values:
+            v.expand()
 
     def get_constant_keys(self):
         return [k for k in self.values if type(k) == BaseKey and not k.has_modifiers()]
@@ -767,19 +750,19 @@ class Launcher(object):
             self.copy_from_lines = f.readlines()
 
     def get_global_options(self):
-        if self.inp_parser.has_key("ContemporaryJobs"):
+        if "ContemporaryJobs" in self.inp_parser:
             self.max_jobs = int(self.inp_parser.pop("ContemporaryJobs")())
 
-        if self.inp_parser.has_key("Times"):
+        if "Times" in self.inp_parser:
             self.times = int(self.inp_parser.pop("Times")())
 
-        if self.inp_parser.has_key("CopyFrom"):
-            self.copy_from = self.inp_parser.key("CopyFrom")()
+        if "CopyFrom" in self.inp_parser:
+            self.copy_from = self.inp_parser["CopyFrom"]()
 
-        if self.inp_parser.has_key("SwapSUS"):
-            self.swap_sus = self.inp_parser.key("SwapSUS")()
+        if "SwapSUS" in self.inp_parser:
+            self.swap_sus = self.inp_parser["SwapSUS"]()
 
-        if self.inp_parser.has_key("WaitingTime"):
+        if "WaitingTime" in self.inp_parser:
             self.waiting_time = float(self.inp_parser.pop("WaitingTime")())
 
     def print_run_info(self, state, complete):
@@ -788,25 +771,25 @@ class Launcher(object):
         # the JOB_ID key is different from any other key, as it is considered to be immutable by pyrla but it is not
         formatted_basekeys = [my_format % (k.key, k.value) for k in basekeys if k.key != "JOB_ID"]
 
-        print "\nRUN INFO:"
-        print "Number of processes: %d" % self.num_states
-        print "Contemporary processes: %d" % self.max_jobs
-        print "Waiting time between job launches: %f" % self.waiting_time
-        if self.times > 1: print "Each job will be repeated %d times" % self.times
+        print("\nRUN INFO:")
+        print("Number of processes: %d" % self.num_states)
+        print("Contemporary processes: %d" % self.max_jobs)
+        print("Waiting time between job launches: %f" % self.waiting_time)
+        if self.times > 1: print("Each job will be repeated %d times" % self.times)
         if self.copy_from != None:
-            print "The input file will be based on '%s'" % self.copy_from
-        print "\nKEYS WITH FIXED VALUES"
-        print "\n".join(formatted_basekeys)
+            print("The input file will be based on '%s'" % self.copy_from)
+        print("\nKEYS WITH FIXED VALUES")
+        print("\n".join(formatted_basekeys))
         
         if complete:
             for i in range(len(self.states)):
-                print "\nJOB %d" % i
-                for k, v in self.states[i].iteritems():
+                print("\nJOB %d" % i)
+                for k, v in self.states[i].items():
                     to_print = my_format % (k, v)
-                    if to_print not in formatted_basekeys: print to_print
+                    if to_print not in formatted_basekeys: print(to_print)
 
     def launch(self, opts):
-        state = StateFactory(self.inp_parser.values, self.inp_parser.modifiers)
+        state = StateFactory(list(self.inp_parser.values()), self.inp_parser.modifiers)
 
         while state.set_next() != False:
             self.states.append(state.get_state_dict())
@@ -854,17 +837,17 @@ class Launcher(object):
 
 def main():
     def print_usage():
-        print "USAGE:"
-        print "\t%s input [-d|--debug] [-h|--help] [-v|--version]" % sys.argv[0]
-        print "\t[-r|--dry-run] [-s|--safe] [--max-states N] [--start-from N] [--end-after N]"
-        print "\t[-S\--summarise] [-w\--wait seconds]"
+        print("USAGE:")
+        print("\t%s input [-d|--debug] [-h|--help] [-v|--version]" % sys.argv[0])
+        print("\t[-r|--dry-run] [-s|--safe] [--max-states N] [--start-from N] [--end-after N]")
+        print("\t[-S\--summarise] [-w\--wait seconds]")
         exit(1)
 
     def print_version():
-        print "pyrla (PYrla è un Rivoluzionario Lanciatore Asincrono) 0.0.3"
-        print "Copyright (C) 2011 Lorenzo Rovigatti"
-        print "This is free software; see the source for copying conditions.  There is NO"
-        print "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n"
+        print("pyrla (PYrla è un Rivoluzionario Lanciatore Asincrono) 0.0.3")
+        print("Copyright (C) 2011 Lorenzo Rovigatti")
+        print("This is free software; see the source for copying conditions.  There is NO")
+        print("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n")
         exit(1)
         
     def parse_options(command_line_args):
