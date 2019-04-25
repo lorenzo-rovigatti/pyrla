@@ -99,7 +99,7 @@ class BaseKey(object):
     def __init__(self, key, value, key_value_dict):
         self.key = key
         self.raw_value = value
-        if self.raw_value[0] == '"' and self.raw_value[-1] == '"':
+        if len(value) > 0 and self.raw_value[0] == '"' and self.raw_value[-1] == '"':
             self.raw_value = self.raw_value[1:-1]
         self.value = self.raw_value
         # special keys (aka keywords like Input, DirectoryStructure, ecc) need to be handled in a different way
@@ -282,12 +282,16 @@ class BashKey(ExpressionKey):
         ExpressionKey.expand_base_value(self)
         found_keys = re.findall(BashKey.RE , self.value)
         if len(found_keys) != 1:
-            Logger.log("Can't expand variable '%s' in line '%s' (error: bash commands should be enclosed between '$b{' and '}')" % (self.key, self.raw_value), Logger.WARNING)
+            Logger.log("Can't expand key '%s' in line '%s' (error: bash commands should be enclosed between '$b{' and '}')" % (self.key, self.raw_value), Logger.WARNING)
         else:
             command = found_keys[0][3:-1]
-            p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+            # the universal_newlines=True makes Popen use str instead of bytes (among other side effects)
+            p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, universal_newlines=True)
             out = p.communicate()[0]
             self.value = out.strip()
+            
+            if p.returncode != 0:
+                Logger.log("The bash command '%s' associated to the key '%s' returned %d (!= 0)" % (command, self.key, p.returncode), Logger.WARNING)
 
 
 class ExpressionMultipleKey(MultipleKey, ExpressionKey):
@@ -353,8 +357,8 @@ class KeyFactory(object):
                 Logger.log("The '%s' key looks like a list of values but contains the token '%s': I will assume it is part of a bash-like command and hence treat it like a single key " % (key, token), Logger.WARNING)
                 return True
             
-        # if the value is surrounded by quotes or its made of a single word
-        if (value[0] == '"' and value[-1] == '"') or len(value.split()) == 1:
+        # if the value is empty, surrounded by quotes or it's just a single word
+        if len(value) == 0 or (value[0] == '"' and value[-1] == '"') or len(value.split()) == 1:
             return True
             
         return False
