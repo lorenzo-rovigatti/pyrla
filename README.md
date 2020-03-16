@@ -58,6 +58,7 @@ The `examples/` folder contain two subfolders, `input` and `modifiers`. There yo
 	* InputSeparator: a character or a string which is used to separate keys from values in the input file (the CopyFrom one). Default is the equal sign '='.
 	* Exclusive: if True, no more than one job per directory can be executed.
 	* SwapSUS: if True and if Times > 1 then pyrla will try to swap SUS configurations between neighbouring particle windows.
+	* Relaunch: if True relaunch jobs that returns non-zero exit codes.
 		
 * The following built-in keys can be used in user-defined keys:
 	* JOB_ID: expands to the current job's id, which is 0 for the first job, 1 for the second, etc.

@@ -94,7 +94,8 @@ class KeyModifier(object):
 class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
-                    "Times", "InputSeparator", "Exclusive", "SwapSUS", "LastFile")
+                    "Times", "InputSeparator", "Exclusive", "SwapSUS", "LastFile",
+                    "Relaunch")
 
     def __init__(self, key, value, key_value_dict):
         self.key = key
@@ -573,7 +574,7 @@ class Job(threading.Thread):
             obj = os.path.join(self.original_dir, obj)
             try:
                 if os.path.isdir(obj):
-                    # the dst in copytree may not exist so we have to give it the chdir + the name
+                    # the dst in copytree may not exist so we have to give it the current dir + the name
                     # of the folder we want to copy
                     name = os.path.basename(os.path.normpath(obj))
                     shutil.copytree(obj, self.working_dir + "/" + name)
@@ -591,6 +592,46 @@ class Job(threading.Thread):
     def get_N_from_conf(self, name):
         with open(name) as f:
             return int(f.readline().split()[2])
+        
+    def _execute(self):
+        # we need a lock because we have to change the current directory
+        Job.dir_lock.acquire()
+        
+        os.chdir(self.working_dir)
+
+        p = subprocess.Popen(self.state["Execute"], shell=True, cwd=self.working_dir)
+        
+        os.chdir(self.original_dir)
+
+        if "NextDirectoryStructure" in self.state:
+            last = self.state["LastFile"]
+            last_here = os.path.join(self.state['DirectoryStructure'], last)
+            last_next = os.path.join(self.state['NextDirectoryStructure'], last)
+
+            # this fails if the directory structure has not been set up yet
+            try:
+                swap_log = open(os.path.join(self.state['DirectoryStructure'], "swap_log.dat"), "a")
+
+                N_here = self.get_N_from_conf(last_here)
+                N_next = self.get_N_from_conf(last_next)
+
+                if N_here == N_next:
+                    os.rename(last_here, last_next + ".tmp")
+                    os.rename(last_next, last_here)
+                    os.rename(last_next + ".tmp", last_next)
+                    swap_log.write("1\n")
+                else:
+                    swap_log.write("0\n")
+
+                swap_log.close()
+            except IOError:
+                pass
+
+        Job.dir_lock.release()
+
+        _, status = os.waitpid(p.pid, 0)
+        
+        return os.WEXITSTATUS(status)
 
     def run(self):
         while True:
@@ -611,9 +652,6 @@ class Job(threading.Thread):
                 run = True
 
             if run:
-                # we need a lock because we have to change the current directory
-                Job.dir_lock.acquire()
-
                 try:
                     self.create_dir_structure()
                     self.create_copy_to()
@@ -622,39 +660,13 @@ class Job(threading.Thread):
                     Logger.log(e, Logger.WARNING)
                     Job.dir_lock.release()
                 else:
-                    os.chdir(self.working_dir)
-
-                    p = subprocess.Popen(self.state["Execute"], shell=True, cwd=self.working_dir)
-                    os.chdir(self.original_dir)
-
-                    if "NextDirectoryStructure" in self.state:
-                        last = self.state["LastFile"]
-                        last_here = os.path.join(self.state['DirectoryStructure'], last)
-                        last_next = os.path.join(self.state['NextDirectoryStructure'], last)
-
-                        # this fails if the directory structure has not been set up yet
-                        try:
-                            swap_log = open(os.path.join(self.state['DirectoryStructure'], "swap_log.dat"), "a")
-
-                            N_here = self.get_N_from_conf(last_here)
-                            N_next = self.get_N_from_conf(last_next)
-
-                            if N_here == N_next:
-                                os.rename(last_here, last_next + ".tmp")
-                                os.rename(last_next, last_here)
-                                os.rename(last_next + ".tmp", last_next)
-                                swap_log.write("1\n")
-                            else:
-                                swap_log.write("0\n")
-
-                            swap_log.close()
-                        except IOError:
-                            pass
-
-                    Job.dir_lock.release()
-
-                    os.waitpid(p.pid, 0)
-
+                    # if Relaunch is True then we relaunch the process if its previous exit code was non-zero
+                    relaunch = "Relaunch" in self.state and self.state["Relaunch"] == "True"
+                    keep_running = True
+                    while keep_running:
+                        exit_code = self._execute()
+                        keep_running = relaunch and exit_code != 0
+                        
                 if self.state["Exclusive"] == "True":
                     self.dir_taken_lock.acquire()
                     Job.dir_taken[self.relative_dir] = False
@@ -825,7 +837,7 @@ class Launcher(object):
             if self.num_states > opts['max_states']:
                 Logger.log("The number of states exceeds the maximum number %d" % opts['max_states'], Logger.CRITICAL)
                 exit(1)
-
+                
         if self.max_jobs > self.num_states or self.max_jobs == 0:
             self.max_jobs = self.num_states
 
