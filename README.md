@@ -35,7 +35,8 @@ The `examples/` folder contain two subfolders, `input` and `modifiers`. There yo
 
 ## Input file syntax
 
-* Empty lines or lines starting with \# will not be considered. A well-formed line should look like 'key = value'. Spaces before and after key and value will be stripped off.
+* Empty lines or lines starting with a hash sign (\#) will not be considered. A well-formed line should look like 'key = value'. Spaces before and after key and value are stripped off.
+* Any text coming after a hash sign (\#) will be discarded.
 * About the 'value' syntax:
 	* in general if your value contains spaces then it will be considered as a 'special' value (a mathematical expression or a list of values, for examples). If you want to avoid this you have to put double quotes (") around the whole value.
 	* you can refer to other values by using the syntax $(key). The value of 'key' will be expanded at runtime. An example would be `T_$(T)`.

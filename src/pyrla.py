@@ -448,36 +448,39 @@ class KeyValueDict(collections.UserDict):
 
     def fill_lists(self, line):
         s_line = line.strip()
+        
+        # remove anything that comes after a hash sign
+        s_line = s_line.split("#", 1)[0].strip()
+        
         if len(s_line) > 0:
             my_list = s_line.partition('=')
-            if my_list[0][0] != '#':
-                if my_list[1] == '':
-                    Logger.log("Malformed line '%s'" % s_line, Logger.WARNING)
-                    return
+            if my_list[1] == '':
+                Logger.log("Malformed line '%s'" % s_line, Logger.WARNING)
+                return
 
-                key = my_list[0].strip()
-                if key in KeyValueDict.PROTECTED_KEYS:
-                    Logger.log("'%s' is a protected keyword and cannot be used as a key" % key, Logger.CRITICAL)
+            key = my_list[0].strip()
+            if key in KeyValueDict.PROTECTED_KEYS:
+                Logger.log("'%s' is a protected keyword and cannot be used as a key" % key, Logger.CRITICAL)
+                exit(1)
+                
+            value = my_list[2].strip()
+            # check whether the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
+            if "@@" in my_list[2]:
+                rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
+                modified_value = KeyFactory.get_key(key, rhs, self)
+                if key not in self:
+                    Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported" % key, Logger.CRITICAL)
                     exit(1)
                     
-                value = my_list[2].strip()
-                # check whether the line specifies a modifier (i.e. a value that should be used only if some conditions are met)
-                if "@@" in my_list[2]:
-                    rhs, conditions = [x.strip() for x in my_list[2].partition("@@")[0:3:2]]
-                    modified_value = KeyFactory.get_key(key, rhs, self)
-                    if key not in self:
-                        Logger.log("The modifier '%s' appears before the key it is supposed to act on. This is not supported" % key, Logger.CRITICAL)
-                        exit(1)
-                        
-                    # apply the modifier
-                    self[key].add_modifier(modified_value, conditions)
-                else:
-                    if key in self:
-                        Logger.log("Key '%s' is defined more than once, I'll keep the first definition found, thereby throwing away '%s'"
-                                   % (key, my_list[2].strip()), Logger.WARNING)
-                        return
-    
-                    self[key] = KeyFactory.get_key(key, value, self)
+                # apply the modifier
+                self[key].add_modifier(modified_value, conditions)
+            else:
+                if key in self:
+                    Logger.log("Key '%s' is defined more than once, I'll keep the first definition found, thereby throwing away '%s'"
+                               % (key, my_list[2].strip()), Logger.WARNING)
+                    return
+
+                self[key] = KeyFactory.get_key(key, value, self)
 
 
 # our worker!
