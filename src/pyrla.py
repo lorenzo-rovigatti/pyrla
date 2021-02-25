@@ -532,7 +532,7 @@ class Job(threading.Thread):
         if len(copy_not_found) != 0:
             Logger.log("Job %d: keys '%s' are in CopyToWrite but are not defined" % (self.tid, " ".join(copy_not_found)), Logger.WARNING)
 
-        out = self.working_dir + "/" + name
+        out = os.path.join(self.working_dir, name)
         if self.safe and os.path.exists(out):
             raise Job.SafeError("Job: %d: can't overwrite file '%s' in safe mode, aborting job" % (self.tid, out))
 
@@ -552,7 +552,7 @@ class Job(threading.Thread):
     # also set self.working_dir
     def create_dir_structure(self):
         if "DirectoryStructure" in self.state:
-            self.working_dir = self.original_dir + "/" + self.state['DirectoryStructure']
+            self.working_dir = os.path.join(self.original_dir, self.state['DirectoryStructure'])
             if not os.path.exists(self.working_dir):
                 os.makedirs(self.working_dir)
             elif self.safe:
@@ -562,7 +562,7 @@ class Job(threading.Thread):
             subdirs = self.state['Subdirectories'].split()
 
             for sdir in subdirs:
-                totdir = self.working_dir + "/" + sdir
+                totdir = os.path.join(self.working_dir, sdir)
                 if not os.path.exists(totdir):
                     os.makedirs(totdir)
 
@@ -580,7 +580,7 @@ class Job(threading.Thread):
                     # the dst in copytree may not exist so we have to give it the current dir + the name
                     # of the folder we want to copy
                     name = os.path.basename(os.path.normpath(obj))
-                    shutil.copytree(obj, self.working_dir + "/" + name)
+                    shutil.copytree(obj, os.path.join(self.working_dir, name))
                 else:
                     shutil.copy(obj, self.working_dir)
             except Exception as e:
