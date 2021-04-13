@@ -94,8 +94,7 @@ class KeyModifier(object):
 class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
-                    "Times", "InputSeparator", "Exclusive", "SwapSUS", "LastFile",
-                    "Relaunch")
+                    "Times", "InputSeparator", "Exclusive", "LastFile", "Relaunch", "InputType")
 
     def __init__(self, key, value, key_value_dict):
         self.key = key
@@ -384,6 +383,7 @@ class KeyFactory(object):
 class KeyValueDict(collections.UserDict):
     REQUIRED_BASEKEYS = ("CopyFrom", "ContemporaryJobs")
     PROTECTED_KEYS = ("JOB_ID", "BASE_DIR")
+    ACCEPTED_INPUT_TYPES = ("OptionList", "LAMMPS")
 
     def __init__(self, input_file):
         collections.UserDict.__init__(self)
@@ -403,25 +403,13 @@ class KeyValueDict(collections.UserDict):
         if not "Execute" in self:
             Logger.log("Mandatory key 'Execute' missing", Logger.CRITICAL)
             exit(1)
-
-        if "SwapSUS" in self:
-            if not "DirectoryStructure" in self:
-                Logger.log("Mandatory key 'DirectoryStructure' is missing", Logger.CRITICAL)
+            
+        if "InputType" in self:
+            if self["InputType"]() not in KeyValueDict.ACCEPTED_INPUT_TYPES:
+                Logger.log("Invalid InputType. The supported values are %s" % ", ".join(KeyValueDict.ACCEPTED_INPUT_TYPES), Logger.CRITICAL)
                 exit(1)
-
-            if not "LastFile" in self:
-                Logger.log("Mandatory key 'LastFile' is missing", Logger.CRITICAL)
-                exit(1)
-
-            if "Exclusive" in self:
-                excl = self.pop("Exclusive")
-            else:
-                excl = False
-
-            if not excl:
-                Logger.log("'SwapSUS = True' implies 'Exclusive = True'", Logger.WARNING)
-
-            self["Exclusive"] = KeyFactory.get_key("Exclusive", "True", self)
+        else:
+            self["InputType"] = KeyFactory.get_key("InputType", "OptionList", self)
 
         if not "Exclusive" in self:
             self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", self)
@@ -437,7 +425,7 @@ class KeyValueDict(collections.UserDict):
         # check that there are no modifiers associated to undefined keys 
         for mod in self.modifiers:
             if mod.key not in self:
-                Logger.log("There is a modifier for the undefined key '%s'" % mod.key, Logger.WARNING)
+                Logger.log("There is a modifier associated to the undefined key '%s'" % mod.key, Logger.WARNING)
 
     def parse(self):
         with open(self.input) as f:
@@ -447,10 +435,8 @@ class KeyValueDict(collections.UserDict):
         self.check()
 
     def fill_lists(self, line):
-        s_line = line.strip()
-        
         # remove anything that comes after a hash sign
-        s_line = s_line.split("#", 1)[0].strip()
+        s_line = line.strip().split("#", 1)[0].strip()
         
         if len(s_line) > 0:
             my_list = s_line.partition('=')
@@ -538,19 +524,29 @@ class Job(threading.Thread):
         out = os.path.join(self.working_dir, name)
         if self.safe and os.path.exists(out):
             raise Job.SafeError("Job %d: can't overwrite file '%s' in safe mode, aborting job" % (self.tid, out))
-
+        
         with open(out, "w") as f:
-            for line in Job.copy_from_lines:
-                sline = line.split()
-                if len(sline) > 1 and sline[0] in copy_list and sline[1] == sep:
-                    f.write("%s %s %s\n" % (sline[0], sep, self.state[sline[0]]))
-                    copy_list.remove(sline[0])
-                    Logger.log("Job %d: overwriting %s" % (self.tid, sline[0]), Logger.DEBUG)
-                else:
-                    f.write(line)
-
-            for k in copy_list:
-                f.write("%s %s %s\n" % (k, sep, self.state[k]))
+            if self.state["InputType"] == "OptionList":
+                for line in Job.copy_from_lines:
+                    sline = line.split()
+                    if len(sline) > 1 and sline[0] in copy_list and sline[1] == sep:
+                        f.write("%s %s %s\n" % (sline[0], sep, self.state[sline[0]]))
+                        copy_list.remove(sline[0])
+                        Logger.log("Job %d: overwriting %s" % (self.tid, sline[0]), Logger.DEBUG)
+                    else:
+                        f.write(line)
+    
+                for k in copy_list:
+                    f.write("%s %s %s\n" % (k, sep, self.state[k]))
+            elif self.state["InputType"] == "LAMMPS":
+                for line in Job.copy_from_lines:
+                    sline = line.split()
+                    if len(sline) > 2 and sline[0] == "variable" and sline[1] in copy_list:
+                        f.write("variable %s equal %s\n" % (sline[1], self.state[sline[1]]))
+                        copy_list.remove(sline[1])
+                        Logger.log("Job %d: overwriting %s" % (self.tid, sline[1]), Logger.DEBUG)
+                    else:
+                        f.write(line)
 
     # also set self.working_dir
     def create_dir_structure(self):
@@ -771,15 +767,13 @@ class Launcher(object):
         self.copy_from = None
         self.copy_from_lines = None
 
-        self.swap_sus = False
-
         self.times = 1
 
         self.inp_parser = KeyValueDict(inp)
         self.inp_parser.parse()
 
         self.get_global_options()
-        if self.copy_from != None:
+        if self.copy_from is not None:
             self.read_copy_from()
 
     def read_copy_from(self):
@@ -799,9 +793,6 @@ class Launcher(object):
 
         if "CopyFrom" in self.inp_parser:
             self.copy_from = self.inp_parser["CopyFrom"]()
-
-        if "SwapSUS" in self.inp_parser:
-            self.swap_sus = self.inp_parser["SwapSUS"]()
 
         if "WaitingTime" in self.inp_parser:
             self.waiting_time = float(self.inp_parser.pop("WaitingTime")())
@@ -838,9 +829,6 @@ class Launcher(object):
             self.states.append(state.get_state_dict())
             self.num_states += 1
 
-            if self.swap_sus and self.num_states > 1:
-                self.states[-2]["NextDirectoryStructure"] = self.states[-1]["DirectoryStructure"]
-
             if self.num_states > opts['max_states']:
                 Logger.log("The number of states exceeds the maximum number %d" % opts['max_states'], Logger.CRITICAL)
                 exit(1)
@@ -856,7 +844,7 @@ class Launcher(object):
             import time
             time.sleep(opts['wait'])
 
-        if self.copy_from != None:
+        if self.copy_from is not None:
             Job.copy_from_lines = self.copy_from_lines
 
         for i in range(self.max_jobs):
@@ -865,7 +853,7 @@ class Launcher(object):
             j.start()
 
         end_at = self.num_states
-        if opts['end_after'] != None:
+        if opts['end_after'] is not None:
             end_at = opts['start_from'] + opts['end_after']
             if end_at > self.num_states:
                 end_at = self.num_states
