@@ -1,6 +1,6 @@
 # pyrla
 
-pyrla makes it easy to launch parallel processes that execute different commands. Its most common use case is having to run the same command in different directories ordered in a specific hierarchy (e.g. Temperature\_T/Pressure\_P, for several values of P and T). Perhaps the command should be invoked with folder-specific parameters. pyrla makes it easier to automatise this type of repetitive operations without having to resort to bash scripts or similar means. 
+pyrla makes it easy to launch parallel processes that execute different commands. Its most common use case is having to run the same command in different directories ordered in a specific hierarchy (e.g. `Temperature_T/Pressure_P`, for several values of `P` and `T`). Perhaps the command should be invoked with folder-specific parameters. pyrla makes it easier to automatise this type of repetitive operations without having to resort to bash scripts or similar means. 
 With pyrla, you can choose the number of contemporary jobs and their working path, which can be automatically generated. 
 If the command you want to execute takes an input file as an argument (or if you want to have a bespoke file in each job's current directory), such an input file can be written on the fly or generated from an existent input file.
 	
@@ -31,7 +31,7 @@ pyrla expects a single input file (see [Input file syntax](#input-file-syntax)).
 
 ## Examples
 
-The `examples/` folder contain two subfolders, `input` and `modifiers`. There you will find two commented pyrla input files that can be used as starting points to build your own.
+The `examples/` folder contain subfolders where you will find commented pyrla input files that can be used as starting points to build your own.
 
 ## Input file syntax
 
@@ -46,31 +46,44 @@ The `examples/` folder contain two subfolders, `input` and `modifiers`. There yo
 	* you can evaluate a bash command and assign its value to a pyrla variable by enclosing the command between $b{ and }. For example, `a = $b{echo "prova"}` would assign the value 'prova' to the key 'a' 
 		
 * There are some special keys used as 'keywords'. These are:
-	* DirectoryStructure: structure of the directory where the $(Execute) command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T\_$(T)\_Act_$(Activity)`). 
-	* CopyFrom: path (absolute or relative to the pyrla script launching directory) to the base configuration file to be changed. This key may not contain expressions or list of values.
-	* CopyTo: name of the base configuration whose keys will be taken from InputFrom (and modified using the InputFromOverwrite). This file will be copied to the directory given by DirectoryStructure. If this key is missing then the file will have the same name as the CopyFrom
-	* CopyToWrite: name of the keys that should be written in the CopyTo file (if a CopyFrom is specified and it contains any of these keys they will be overwritten).
-	* CopyObjects: one or more paths (absolute or relative to the pyrla script launching directory) to be copied under each job's working directory.
-	* Execute: command to execute.
-	* ContemporaryJobs: maximum number of jobs to be executed together. This key may not contain expressions or list of values. If 0 then no max will be set. Defaults to 0.
-	* WaitingTime: waiting time (in seconds) between job launches. Defaults to 2 seconds.
-	* Subdirectories: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: Subdirectories = confs sus/special wil create two folders under the job's working directory (determined by DirectoryStructure): confs and sus. In addition, a directory called "special" under the sus folder will be created.
-	* Times: how many times the jobs must be executed.
-	* InputSeparator: a character or a string which is used to separate keys from values in the input file (the CopyFrom one). Default is the equal sign '='.
-	* Exclusive: if True, no more than one job per directory can be executed.
-	* SwapSUS: if True and if Times > 1 then pyrla will try to swap SUS configurations between neighbouring particle windows.
-	* Relaunch: if True relaunch jobs that returns non-zero exit codes.
+	* `DirectoryStructure`: structure of the directory where the $(Execute) command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T_$(T)_Act_$(Activity)`). 
+	* `CopyFrom`: path (absolute or relative to the pyrla script launching directory) to the base configuration file to be changed. This key may not contain expressions or list of values.
+	* `CopyTo`: name of the base configuration whose keys will be taken from InputFrom (and modified using the InputFromOverwrite). This file will be copied to the directory given by DirectoryStructure. If this key is missing then the file will have the same name as the CopyFrom
+	* `CopyToWrite`: name of the keys that should be written in the CopyTo file (if a CopyFrom is specified and it contains any of these keys they will be overwritten).
+	* `CopyObjects`: one or more paths (absolute or relative to the pyrla script launching directory) to be copied under each job's working directory.
+	* `Execute`: command to execute.
+	* `ContemporaryJobs`: maximum number of jobs to be executed together. This key may not contain expressions or list of values. If 0 then no max will be set. Defaults to 0.
+	* `WaitingTime`: waiting time (in seconds) between job launches. Defaults to 2 seconds.
+	* `Subdirectories`: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: Subdirectories = confs sus/special wil create two folders under the job's working directory (determined by DirectoryStructure): confs and sus. In addition, a directory called "special" under the sus folder will be created.
+	* `Times`: how many times the jobs must be executed.
+	* `InputSeparator`: a character or a string which is used to separate keys from values in the input file (the CopyFrom one). Default is the equal sign '='.
+	* `Exclusive`: if True, no more than one job per directory can be executed.
+	* `SwapSUS`: if True and if Times > 1 then pyrla will try to swap SUS configurations between neighbouring particle windows.
+	* `Relaunch`: if True relaunch jobs that returns non-zero exit codes.
 		
 * The following built-in keys can be used in user-defined keys:
-	* JOB_ID: expands to the current job's id, which is 0 for the first job, 1 for the second, etc.
-	* BASE_DIR: the directory pyrla was launched from.
+	* `JOB_ID`: expands to the current job's id, which is 0 for the first job, 1 for the second, etc.
+	* `BASE_DIR`: the directory pyrla was launched from.
 	
 * It is possible to have keys take specific values when one or more conditions are met. For example, `Delta = 0.2 @@ T = 0.1, Activity = 1e-5` will assign to Delta the value 0.2 for all those processes that have the two keys T and Activity take the values 0.1 and 1e-5, respectively. As of now, the only conditions available are comma-separated lists of specific values of keys.
 		
 ## Syntax of the CopyFrom file
 
-* A key listed under the CopyToWrite keyword will overwrite a value in the CopyFrom file if the CopyFrom file contains that same key in a 'key = value' line. Here 'same' is meant in a case sensitive way. The default separator is '='. You can use the key InputSeparator in the input file to change the separator. 
-* If one of the CopyToWrite keys is not in the CopyFrom, then a 'key = value' line will be appended at the end of the file.
+pyrla supports different types of CopyFrom file. The type of file can be set by using the InputType key.
+
+### Default syntax
+
+By default pyrla expects a file containing a list of `key = value` lines. In this case
+
+* A key listed under the CopyToWrite keyword will overwrite a value in the CopyFrom file if the CopyFrom file contains that same key in one of its `key = value` line. Here "same" is meant in a case sensitive way. The default separator is `=`. You can use the key InputSeparator in the input file to change the separator. 
+* For each CopyToWrite key that is not in the CopyFrom, a `key = value` line will be appended at the end of the file.
+
+### LAMMPS input file
+
+If InputFile = LAMMPS then pyrla will expect a LAMMPS input file. In this case
+
+* A key listed under the CopyToWrite keyword will overwrite a value in the CopyFrom file if the CopyFrom file contains a `variable key ...`. In this case the line will be replaced by `variable key equal value`.
+* Any CopyToWrite key that is not in the CopyFrom file will not be used (and a warning will be issued).
 	
 ## Acknowledgements
 

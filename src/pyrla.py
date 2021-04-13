@@ -547,6 +547,9 @@ class Job(threading.Thread):
                         Logger.log("Job %d: overwriting %s" % (self.tid, sline[1]), Logger.DEBUG)
                     else:
                         f.write(line)
+                        
+                if len(copy_list) != 0:
+                    Logger.log("Job %d: keys '%s' have not been found in the original input file and hence have not been used" % (self.tid, " ".join(copy_list)), Logger.WARNING)
 
     # also set self.working_dir
     def create_dir_structure(self):
