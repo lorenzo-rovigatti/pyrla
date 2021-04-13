@@ -515,7 +515,10 @@ class Job(threading.Thread):
         if "CopyTo" in self.state:
             name = self.state['CopyTo']
         else:
-            name = self.state['CopyFrom']
+            if os.path.samefile(self.working_dir, self.original_dir):
+                raise Job.SafeError("Job %d: I refuse to overwrite the CopyFrom file '%s', you should either use CopyTo to write to a different filename or DirectoryStructure to set a different target directory" % (self.tid, self.state['CopyFrom']))
+            else:
+                name = self.state['CopyFrom']
 
         # with list(set(*)) we are sure that copy_list contains only unique elements
         if "CopyToWrite" in self.state:
@@ -534,7 +537,7 @@ class Job(threading.Thread):
 
         out = os.path.join(self.working_dir, name)
         if self.safe and os.path.exists(out):
-            raise Job.SafeError("Job: %d: can't overwrite file '%s' in safe mode, aborting job" % (self.tid, out))
+            raise Job.SafeError("Job %d: can't overwrite file '%s' in safe mode, aborting job" % (self.tid, out))
 
         with open(out, "w") as f:
             for line in Job.copy_from_lines:
@@ -556,7 +559,7 @@ class Job(threading.Thread):
             if not os.path.exists(self.working_dir):
                 os.makedirs(self.working_dir)
             elif self.safe:
-                raise Job.SafeError("Job: %d: can't overwrite directory '%s' in safe mode, aborting job" % (self.tid, self.working_dir))
+                raise Job.SafeError("Job %d: can't overwrite directory '%s' in safe mode, aborting job" % (self.tid, self.working_dir))
 
         if "Subdirectories" in self.state:
             subdirs = self.state['Subdirectories'].split()
@@ -661,7 +664,8 @@ class Job(threading.Thread):
                     self.copy_objects()
                 except Job.SafeError as e:
                     Logger.log(e, Logger.WARNING)
-                    Job.dir_lock.release()
+                    if Job.dir_lock.locked():
+                        Job.dir_lock.release()
                 else:
                     # if Relaunch is True then we relaunch the process if its previous exit code was non-zero
                     relaunch = "Relaunch" in self.state and self.state["Relaunch"] == "True"
