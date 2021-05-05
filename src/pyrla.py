@@ -594,10 +594,6 @@ class Job(threading.Thread):
         else:
             return False
 
-    def get_N_from_conf(self, name):
-        with open(name) as f:
-            return int(f.readline().split()[2])
-        
     def _execute(self):
         # we need a lock because we have to change the current directory
         Job.dir_lock.acquire()
@@ -607,30 +603,6 @@ class Job(threading.Thread):
         p = subprocess.Popen(self.state["Execute"], shell=True, cwd=self.working_dir)
         
         os.chdir(self.original_dir)
-
-        if "NextDirectoryStructure" in self.state:
-            last = self.state["LastFile"]
-            last_here = os.path.join(self.state['DirectoryStructure'], last)
-            last_next = os.path.join(self.state['NextDirectoryStructure'], last)
-
-            # this fails if the directory structure has not been set up yet
-            try:
-                swap_log = open(os.path.join(self.state['DirectoryStructure'], "swap_log.dat"), "a")
-
-                N_here = self.get_N_from_conf(last_here)
-                N_next = self.get_N_from_conf(last_next)
-
-                if N_here == N_next:
-                    os.rename(last_here, last_next + ".tmp")
-                    os.rename(last_next, last_here)
-                    os.rename(last_next + ".tmp", last_next)
-                    swap_log.write("1\n")
-                else:
-                    swap_log.write("0\n")
-
-                swap_log.close()
-            except IOError:
-                pass
 
         Job.dir_lock.release()
 
