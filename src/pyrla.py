@@ -36,6 +36,12 @@ from time import sleep
 # used to process mathematical expressions
 from math import * #@UnusedWildImport
 
+try:
+    import jinja2
+    JINJA_AVAILABLE = True
+except ModuleNotFoundError:
+    JINJA_AVAILABLE = False
+
 MAX_STATES = 100000
 
 # static class
@@ -383,7 +389,7 @@ class KeyFactory(object):
 class KeyValueDict(collections.UserDict):
     REQUIRED_BASEKEYS = ("CopyFrom", "ContemporaryJobs")
     PROTECTED_KEYS = ("JOB_ID", "BASE_DIR")
-    ACCEPTED_INPUT_TYPES = ("OptionList", "LAMMPS")
+    ACCEPTED_INPUT_TYPES = ("OptionList", "LAMMPS", "Jinja2")
 
     def __init__(self, input_file):
         collections.UserDict.__init__(self)
@@ -410,6 +416,10 @@ class KeyValueDict(collections.UserDict):
                 exit(1)
         else:
             self["InputType"] = KeyFactory.get_key("InputType", "OptionList", self)
+            
+        if self["InputType"] == "Jinja2" and not JINJA_AVAILABLE:
+            Logger.log("The jinja2 python package required by InputType = \"Jinja2\" was not found, aborting", Logger.CRITICAL)
+            exit(1)
 
         if not "Exclusive" in self:
             self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", self)
@@ -550,6 +560,12 @@ class Job(threading.Thread):
                         
                 if len(copy_list) != 0:
                     Logger.log("Job %d: keys '%s' have not been found in the original input file and hence have not been used" % (self.tid, " ".join(copy_list)), Logger.WARNING)
+            elif self.state["InputType"] == "Jinja2":
+                j_env = jinja2.Environment()
+                j_template = j_env.from_string("\n".join(Job.copy_from_lines))
+                key_dict = dict((key, self.state[key]) for key in copy_list)
+                f.write(j_template.render(key_dict))
+                    
 
     # also set self.working_dir
     def create_dir_structure(self):
