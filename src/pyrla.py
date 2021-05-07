@@ -562,7 +562,11 @@ class Job(threading.Thread):
                     Logger.log("Job %d: keys '%s' have not been found in the original input file and hence have not been used" % (self.tid, " ".join(copy_list)), Logger.WARNING)
             elif self.state["InputType"] == "Jinja2":
                 j_env = jinja2.Environment()
-                j_template = j_env.from_string("\n".join(Job.copy_from_lines))
+                try:
+                    j_template = j_env.from_string("\n".join(Job.copy_from_lines))
+                except jinja2.exceptions.TemplateError as e:
+                    Logger.log("Job %d: jinja2 raised the following error: '%s'" % e.message, Logger.CRITICAL)
+                    exit(1)
                 key_dict = dict((key, self.state[key]) for key in copy_list)
                 f.write(j_template.render(key_dict))
                     
@@ -774,6 +778,17 @@ class Launcher(object):
 
         with open(self.copy_from) as f:
             self.copy_from_lines = f.readlines()
+
+        if self.inp_parser["InputType"]() == "Jinja2":
+            j_env = jinja2.Environment()
+            try:
+                j_env.from_string("\n".join(self.copy_from_lines))
+            except jinja2.exceptions.TemplateSyntaxError as e:
+                Logger.log("jinja2 raised the following syntax error: '%s' at line %d" % (e.message, e.lineno), Logger.CRITICAL)
+                exit(1)
+            except jinja2.exceptions.TemplateError as e:
+                Logger.log("jinja2raised the following error: '%s'" % e.message, Logger.CRITICAL)
+                exit(1)
 
     def get_global_options(self):
         if "ContemporaryJobs" in self.inp_parser:
