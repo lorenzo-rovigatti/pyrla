@@ -5,7 +5,7 @@
 # conditions are met
 ################################################################
 
-T = F 0.1 T 0.5 V +0.1
+T = 0.1 0.2 0.3 0.4
 Activity = 1e-5 2e-5 3e-5
 # This is the general value for Delta
 Delta = 0.1

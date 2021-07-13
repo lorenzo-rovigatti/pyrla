@@ -1,0 +1,33 @@
+################################################################
+# Example of an input_example for pyrla
+# This file will launch 6 jobs at once (one for each unique 
+# combination of temperatures and activities). Each job will run 
+# in a separate directory (that will be created at runtime) 
+# whose name is indicated in the DirectoryStructure key. In each 
+# directory will be created a file named as in the CopyTo key. 
+# This file will contain the lines found in the CopyFrom file 
+# with the keys in CopyToWrite overwritten or appended at the 
+# end. In each directory the Execute command will be issued.
+# The number of parallel jobs ran will be 3 (as stated in the
+# ContemporaryJobs key). pyrla will launch a job every 0.5s.
+################################################################
+
+# this means FROM 0.1 TO 0.4 VIA +0.1. The "TO" value is outside
+# the range that will be included, so this syntax is equivalent
+# to 'T = 0.1 0.2 0.3'
+T = F 0.1 T 0.4 V +0.1
+Activity = 1e-5 2e-5
+Delta = 0.1
+
+CopyFrom = foobar
+CopyTo = foo_$(T)_$(Activity)
+CopyToWrite = T Activity Delta times
+
+times = 4
+
+DirectoryStructure = T_$(T)/Activity_$(Activity)
+Execute = echo "Job N. $(JOB_ID): I'm working at $(T) temperature and $(Activity) activity" > result
+ContemporaryJobs = 3
+WaitingTime = 0.5
+
+InputType = Jinja2
