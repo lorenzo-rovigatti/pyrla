@@ -19,7 +19,6 @@
 
 #-------------------------------------------------------------------------------- 
 # TODO: 
-#    - add PreExecute and PostExecute (executed by each job)
 #    - add PreJobsLaunch and PostJobsLaunch (executed at a 'global' level 
 #        before and after the spawning of the threads)
 #-------------------------------------------------------------------------------- 
@@ -100,7 +99,8 @@ class KeyModifier(object):
 class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
-                    "Times", "InputSeparator", "Exclusive", "LastFile", "Relaunch", "InputType")
+                    "Times", "InputSeparator", "Exclusive", "LastFile", "Relaunch", "InputType",
+                    "PreExecute", "PostExecute")
 
     def __init__(self, key, value, key_value_dict):
         self.key = key
@@ -425,6 +425,11 @@ class KeyValueDict(collections.UserDict):
             self["Exclusive"] = KeyFactory.get_key("Exclusive", "False", self)
         else:
             self["Exclusive"].raw_value = self["Exclusive"].raw_value.capitalize()
+            
+        if not "PreExecute" in self:
+            self["PreExecute"] = KeyFactory.get_key("PreExecute", "", self)
+        if not "PostExecute" in self:
+            self["PostExecute"] = KeyFactory.get_key("PostExecute", "", self)
 
         for bk in KeyValueDict.REQUIRED_BASEKEYS:
             if bk in self:
@@ -614,13 +619,13 @@ class Job(threading.Thread):
         else:
             return False
 
-    def _execute(self):
+    def _execute(self, cmd):
         # we need a lock because we have to change the current directory
         Job.dir_lock.acquire()
         
         os.chdir(self.working_dir)
-
-        p = subprocess.Popen(self.state["Execute"], shell=True, cwd=self.working_dir)
+        
+        p = subprocess.Popen(cmd, shell=True, cwd=self.working_dir)
         
         os.chdir(self.original_dir)
 
@@ -658,12 +663,26 @@ class Job(threading.Thread):
                     if Job.dir_lock.locked():
                         Job.dir_lock.release()
                 else:
-                    # if Relaunch is True then we relaunch the process if its previous exit code was non-zero
-                    relaunch = "Relaunch" in self.state and self.state["Relaunch"] == "True"
-                    keep_running = True
-                    while keep_running:
-                        exit_code = self._execute()
-                        keep_running = relaunch and exit_code != 0
+                    pre_exit_code = 0
+                    if self.state["PreExecute"] != "":
+                        pre_exit_code = self._execute(self.state["PreExecute"])
+                            
+                    if pre_exit_code == 0:
+                        relaunch = "Relaunch" in self.state and self.state["Relaunch"] == "True"
+                        execute = True
+                        exit_code = 0
+                        while execute:
+                            exit_code = self._execute(self.state["Execute"])
+                            # if Relaunch is True then we relaunch the process if its previous exit code was non-zero
+                            execute = relaunch and exit_code != 0
+                            
+                        if exit_code == 0:
+                            if self.state["PostExecute"] != "":
+                                post_exit_code = self._execute(self.state["PostExecute"])
+                                if post_exit_code != 0:
+                                    Logger.log("Job %d: the PostExecute command '%s' returned %d" % (self.tid, self.state["PreExecute"], post_exit_code), Logger.ERROR)
+                    else:
+                        Logger.log("Job %d: the PreExecute command '%s' returned %d" % (self.tid, self.state["PreExecute"], pre_exit_code), Logger.ERROR)
                         
                 if self.state["Exclusive"] == "True":
                     self.dir_taken_lock.acquire()

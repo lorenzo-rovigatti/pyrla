@@ -46,20 +46,21 @@ The `examples/` folder contain subfolders where you will find commented pyrla in
 	* you can evaluate a bash command and assign its value to a pyrla variable by enclosing the command between $b{ and }. For example, `a = $b{echo "prova"}` would assign the value 'prova' to the key 'a' 
 		
 * There are some special keys used as 'keywords'. These are:
-	* `DirectoryStructure`: structure of the directory where the $(Execute) command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T_$(T)_Act_$(Activity)`). 
+	* `DirectoryStructure`: structure of the directory where the `Execute` command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T_$(T)_Act_$(Activity)`). 
 	* `CopyFrom`: path (absolute or relative to the pyrla script launching directory) to the base configuration file to be changed. This key may not contain expressions or list of values.
 	* `CopyTo`: name of the base configuration whose keys will be taken from InputFrom (and modified using the InputFromOverwrite). This file will be copied to the directory given by DirectoryStructure. If this key is missing then the file will have the same name as the CopyFrom
 	* `CopyToWrite`: name of the keys that should be written in the CopyTo file (if a CopyFrom is specified and it contains any of these keys they will be overwritten).
 	* `CopyObjects`: one or more paths (absolute or relative to the pyrla script launching directory) to be copied under each job's working directory.
-	* `Execute`: command to execute.
+	* `Execute`: the command to execute.
+	* `PreExecute`: a command to be executed before `Execute`. If the command exits with a non-zero exit code no other command will be run.
+	* `PostExecute`: a command that will be executed after `Execute` if and only if `Execute` exits with a zero exit code.
+	* `Relaunch`: if True relaunch jobs that return non-zero exit codes. Note that only the `Execute` command gets re-launched.
 	* `ContemporaryJobs`: maximum number of jobs to be executed together. This key may not contain expressions or list of values. If 0 then no max will be set. Defaults to 0.
 	* `WaitingTime`: waiting time (in seconds) between job launches. Defaults to 2 seconds.
 	* `Subdirectories`: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: Subdirectories = confs sus/special wil create two folders under the job's working directory (determined by DirectoryStructure): confs and sus. In addition, a directory called "special" under the sus folder will be created.
 	* `Times`: how many times the jobs must be executed.
 	* `InputSeparator`: a character or a string which is used to separate keys from values in the input file (the CopyFrom one). Default is the equal sign '='.
 	* `Exclusive`: if True, no more than one job per directory can be executed.
-	* `SwapSUS`: if True and if Times > 1 then pyrla will try to swap SUS configurations between neighbouring particle windows.
-	* `Relaunch`: if True relaunch jobs that returns non-zero exit codes.
 		
 * The following built-in keys can be used in user-defined keys:
 	* `JOB_ID`: expands to the current job's id, which is 0 for the first job, 1 for the second, etc.
