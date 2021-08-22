@@ -31,7 +31,7 @@ pyrla expects a single input file (see [Input file syntax](#input-file-syntax)).
 
 ## Examples
 
-The `examples/` folder contain subfolders where you will find commented pyrla input files that can be used as starting points to build your own.
+The `pyrla/examples/` folder contains commented pyrla input files that can be used as starting points to build your own.
 
 ## Input file syntax
 
@@ -57,7 +57,7 @@ The `examples/` folder contain subfolders where you will find commented pyrla in
 	* `Relaunch`: if True relaunch jobs that return non-zero exit codes. Note that only the `Execute` command gets re-launched.
 	* `ContemporaryJobs`: maximum number of jobs to be executed together. This key may not contain expressions or list of values. If 0 then no max will be set. Defaults to 0.
 	* `WaitingTime`: waiting time (in seconds) between job launches. Defaults to 2 seconds.
-	* `Subdirectories`: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: Subdirectories = confs sus/special wil create two folders under the job's working directory (determined by DirectoryStructure): confs and sus. In addition, a directory called "special" under the sus folder will be created.
+	* `Subdirectories`: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: `Subdirectories = confs sus/special` will create two folders under the job's working directory (determined by `DirectoryStructure``): confs and sus. In addition, a directory called "special" under the sus folder will be created.
 	* `Times`: how many times the jobs must be executed.
 	* `InputSeparator`: a character or a string which is used to separate keys from values in the input file (the CopyFrom one). Default is the equal sign '='.
 	* `Exclusive`: if True, no more than one job per directory can be executed.
@@ -70,21 +70,21 @@ The `examples/` folder contain subfolders where you will find commented pyrla in
 		
 ## Syntax of the CopyFrom file
 
-pyrla supports different types of CopyFrom file. The type of file can be set by using the InputType key.
+pyrla supports different types of CopyFrom file. The type of file can be set by using the `InputType` key.
 
 ### Default syntax
 
 By default pyrla expects a file containing a list of `key = value` lines. In this case
 
-* A key listed under the CopyToWrite keyword will overwrite a value in the CopyFrom file if the CopyFrom file contains that same key in one of its `key = value` line. Here "same" is meant in a case sensitive way. The default separator is `=`. You can use the key InputSeparator in the input file to change the separator. 
-* For each CopyToWrite key that is not in the CopyFrom, a `key = value` line will be appended at the end of the file.
+* A key listed under the `CopyToWrite` keyword will overwrite a value in the `CopyFrom` file if the `CopyFrom` file contains that same key in one of its `key = value` line. Here "same" is meant in a case sensitive way. The default separator is `=`. You can use the `InputSeparator` key in the input file to change the separator. 
+* For each `CopyToWrite` key that is not in the `CopyFrom`, a `key = value` line will be appended at the end of the file.
 
 ### LAMMPS input file
 
 If `InputFile = LAMMPS` then pyrla will expect a LAMMPS input file. In this case
 
-* A key listed under the CopyToWrite keyword will overwrite a value in the CopyFrom file if the CopyFrom file contains a `variable key ...`. In this case the line will be replaced by `variable key equal value`.
-* Any CopyToWrite key that is not in the CopyFrom file will not be used (and a warning will be issued).
+* A key listed under the `CopyToWrite` keyword will overwrite a value in the `CopyFrom` file if the `CopyFrom` file contains a `variable key ...`. In this case the line will be replaced by `variable key equal value`.
+* Any `CopyToWrite` key that is not in the CopyFrom file will not be used (and a warning will be issued).
 
 ### Jinja2 templates
 
