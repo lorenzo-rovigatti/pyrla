@@ -1,3 +1,8 @@
-v. 0.1.0
+v. 0.1.1
+	Bugfixing:
+		- Remove unwanted end-of-lines from Jinja-generated input files
+		- Fix the name of the InputType (which was spelt InputFile) key in the README
+
+v. 0.1.0 [eb3b512]
 	First official release
 	

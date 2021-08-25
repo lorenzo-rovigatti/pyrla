@@ -81,14 +81,14 @@ By default pyrla expects a file containing a list of `key = value` lines. In thi
 
 ### LAMMPS input file
 
-If `InputFile = LAMMPS` then pyrla will expect a LAMMPS input file. In this case
+If `InputType = LAMMPS` then pyrla will expect a LAMMPS input file. In this case
 
 * A key listed under the `CopyToWrite` keyword will overwrite a value in the `CopyFrom` file if the `CopyFrom` file contains a `variable key ...`. In this case the line will be replaced by `variable key equal value`.
 * Any `CopyToWrite` key that is not in the CopyFrom file will not be used (and a warning will be issued).
 
 ### Jinja2 templates
 
-If `InputFile = Jinja2` then pyrla will expect a [Jinja2](https://palletsprojects.com/p/jinja/) template file. In this case the values associated to the keys specified in CopyToWrite will be passed to the Jinja template. This feature requires the `jinja2` python package to be installed.
+If `InputType = Jinja2` then pyrla will expect a [Jinja2](https://palletsprojects.com/p/jinja/) template file. In this case the values associated to the keys specified in CopyToWrite will be passed to the Jinja template. This feature requires the `jinja2` python package to be installed.
 	
 ## Acknowledgements
 

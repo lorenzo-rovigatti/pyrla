@@ -568,7 +568,7 @@ class Job(threading.Thread):
             elif self.state["InputType"] == "Jinja2":
                 j_env = jinja2.Environment()
                 try:
-                    j_template = j_env.from_string("\n".join(Job.copy_from_lines))
+                    j_template = j_env.from_string("".join(Job.copy_from_lines))
                 except jinja2.exceptions.TemplateError as e:
                     Logger.log("Job %d: jinja2 raised the following error: '%s'" % e.message, Logger.CRITICAL)
                     exit(1)
