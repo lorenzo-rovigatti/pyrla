@@ -44,7 +44,6 @@ The `pyrla/examples/` folder contains commented pyrla input files that can be us
 	* you can load a list of values from a file by using the syntax `key = LF filename`. Each row will be treated as an item of the list.
 	* you can use complex sequences in a way similar to bash's seq or python's range but in a more flexible way. The actual syntax is: `F start T target V inc`. Of course start is the starting value while target is the final value (excluded from the sequence, like in C-style for loops) and inc is the action to be performed on start to go towards target. A simple example would be `T = F 0.1 T 0.4 V +0.1` which is equivalent `T = 0.1 0.2 0.3`. You can also have more complex sequences like `T = F 0.1 T 100 V \*10`, which is equivalent to `T = 0.1 1 10`.
 	* you can evaluate a bash command and assign its value to a pyrla variable by enclosing the command between $b{ and }. For example, `a = $b{echo "prova"}` would assign the value 'prova' to the key 'a' 
-		
 * There are some special keys used as 'keywords'. These are:
 	* `DirectoryStructure`: structure of the directory where the `Execute` command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T_$(T)_Act_$(Activity)`). 
 	* `CopyFrom`: path (absolute or relative to the pyrla script launching directory) to the base configuration file to be changed. This key may not contain expressions or list of values.

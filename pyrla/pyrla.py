@@ -99,7 +99,7 @@ class KeyModifier(object):
 class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
-                    "Times", "InputSeparator", "Exclusive", "LastFile", "Relaunch", "InputType",
+                    "Times", "InputSeparator", "Exclusive", "Relaunch", "InputType",
                     "PreExecute", "PostExecute")
 
     def __init__(self, key, value, key_value_dict):
