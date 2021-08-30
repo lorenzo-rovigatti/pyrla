@@ -1,0 +1,13 @@
+################################################################
+# This example is very similar to the one present in the 
+# examples/input/ folder. Here, however, we make use of run 
+# conditions to select which jobs will be run
+################################################################
+
+T = 0.1 0.2 0.3 0.4
+Activity = 1e-5 2e-5 3e-5
+
+RunConditions = float(T) > 0.2 or float(Activity) < 2e-5
+
+Execute = echo "Job N. $(JOB_ID): I'm working at T = $(T) and Activity = $(Activity)"
+WaitingTime = 0
