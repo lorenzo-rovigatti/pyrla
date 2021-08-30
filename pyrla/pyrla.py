@@ -100,7 +100,7 @@ class BaseKey(object):
     SPECIAL_KEYS = ("CopyTo", "CopyFrom", "CopyToWrite", "Execute", "DirectoryStructure",
                     "ContemporaryJobs", "Subdirectories", "CopyObjects", "WaitingTime",
                     "Times", "InputSeparator", "Exclusive", "Relaunch", "InputType",
-                    "PreExecute", "PostExecute")
+                    "PreExecute", "PostExecute", "RunConditions")
 
     def __init__(self, key, value, key_value_dict):
         self.key = key
@@ -707,6 +707,11 @@ class StateFactory(object):
         for v in self.values:
             v.expand()
 
+        self.conditions = []            
+        condition_key = [k for k in self.values if k.key == "RunConditions"]
+        if len(condition_key) > 0:
+            self.conditions = [c.strip() for c in condition_key[0]().split(",")]
+            
     def get_constant_keys(self):
         return [k for k in self.values if type(k) == BaseKey and not k.has_modifiers()]
 
@@ -735,21 +740,8 @@ class StateFactory(object):
 
         self.values = nodep + withdep
 
-    def get_state_dict(self):
-        state = {}
-
-        # first we generate the default state dictionary
-        for v in self.values:
-            if v.key == "JOB_ID":
-                v.raw_value = str(self.current_id)
-            v.expand()
-            state[v.key] = v()
-
-        return state
-
-    def set_next(self):
+    def _next_candidate_state(self):
         if not self.first:
-            self.current_id += 1
             changed = False
             # in this loop we cycle through all the values of the keys
             while not changed:
@@ -763,9 +755,34 @@ class StateFactory(object):
                     self.changing_key -= 1
 
                 if self.max_changed < 0 or self.changing_key < 0:
-                    return False
+                    return None
 
         self.first = False
+        
+        state = {}
+        for v in self.values:
+            if v.key == "JOB_ID":
+                v.raw_value = str(self.current_id)
+            v.expand()
+            state[v.key] = v()
+            
+        return state
+    
+    def set_next(self):
+        state_found = False
+        while not state_found:
+            next_state = self._next_candidate_state()
+            
+            if next_state is None:
+                return False
+            
+            state_found = True
+            for condition in self.conditions:
+                state_found &= eval(condition, None, next_state)
+                
+        self.next_state = next_state
+        self.current_id += 1
+
         return True
 
 
@@ -822,8 +839,8 @@ class Launcher(object):
         if "WaitingTime" in self.inp_parser:
             self.waiting_time = float(self.inp_parser.pop("WaitingTime")())
 
-    def print_run_info(self, state, complete):
-        basekeys = state.get_constant_keys()
+    def print_run_info(self, state_factory, complete):
+        basekeys = state_factory.get_constant_keys()
         my_format = "\t%s: %s"
         # the JOB_ID key is different from any other key, as it is considered to be immutable by pyrla but it is not
         formatted_basekeys = [my_format % (k.key, k.value) for k in basekeys if k.key != "JOB_ID"]
@@ -848,10 +865,10 @@ class Launcher(object):
                         print(to_print)
 
     def launch(self, opts):
-        state = StateFactory(list(self.inp_parser.values()), self.inp_parser.modifiers)
+        state_factory = StateFactory(list(self.inp_parser.values()), self.inp_parser.modifiers)
 
-        while state.set_next() != False:
-            self.states.append(state.get_state_dict())
+        while state_factory.set_next() != False:
+            self.states.append(state_factory.next_state)
             self.num_states += 1
 
             if self.num_states > opts['max_states']:
@@ -862,7 +879,7 @@ class Launcher(object):
             self.max_jobs = self.num_states
 
         if opts['dry_run'] or opts['summarise']:
-            self.print_run_info(state, opts['dry_run'])
+            self.print_run_info(state_factory, opts['dry_run'])
             return
         
         if opts['wait'] > 0:

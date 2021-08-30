@@ -1,4 +1,7 @@
-v. 0.1.1
+v. 0.2.0
+	- Introduce the new RunConditions key, which makes it possible to finely select the states that will be run
+
+v. 0.1.1 [da64802]
 	Bugfixing release:
 		- Remove unwanted end-of-lines from Jinja-generated input files
 		- Fix the name of the InputType (which was spelt InputFile) key in the README

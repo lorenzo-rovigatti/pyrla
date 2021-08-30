@@ -40,9 +40,9 @@ The `pyrla/examples/` folder contains commented pyrla input files that can be us
 * About the 'value' syntax:
 	* in general if your value contains spaces then it will be considered as a 'special' value (a mathematical expression or a list of values, for examples). If you want to avoid this you have to put double quotes (") around the whole value.
 	* you can refer to other values by using the syntax $(key). The value of 'key' will be expanded at runtime. An example would be `T_$(T)`.
-	* you can use mathematical expressions by enclosing them with ${ and }. An example would be `${2 + 3}`. You can also use complex functions (as long as they are defined in python's math module). An example would be `${log($(T)) + 0.2}`. Evaluation of math keys require the use of Python's `eval` function, which is [known to be insecure](https://softwareengineering.stackexchange.com/a/311510). Be careful.
+	* you can use mathematical expressions by enclosing them with ${ and }. An example would be `${2 + 3}`. You can also use complex functions (as long as they are defined in python's math module). An example would be `${log($(T)) + 0.2}`.
 	* you can load a list of values from a file by using the syntax `key = LF filename`. Each row will be treated as an item of the list.
-	* you can use complex sequences in a way similar to bash's seq or python's range but in a more flexible way. The actual syntax is: `F start T target V inc`. Of course start is the starting value while target is the final value (excluded from the sequence, like in C-style for loops) and inc is the action to be performed on start to go towards target. A simple example would be `T = F 0.1 T 0.4 V +0.1` which is equivalent `T = 0.1 0.2 0.3`. You can also have more complex sequences like `T = F 0.1 T 100 V \*10`, which is equivalent to `T = 0.1 1 10`.
+	* you can use complex sequences in a way similar to bash's seq or python's range but in a more flexible way. The actual syntax is: `F start T target V inc`. Of course start is the starting value while target is the final value (excluded from the sequence, like in C-style for loops) and inc is the action to be performed on start to go towards target. A simple example would be `T = F 0.1 T 0.4 V +0.1` which is equivalent `T = 0.1 0.2 0.3`. You can also have more complex sequences like `T = F 0.1 T 100 V *10`, which is equivalent to `T = 0.1 1 10`.
 	* you can evaluate a bash command and assign its value to a pyrla variable by enclosing the command between $b{ and }. For example, `a = $b{echo "prova"}` would assign the value 'prova' to the key 'a' 
 * There are some special keys used as 'keywords'. These are:
 	* `DirectoryStructure`: structure of the directory where the `Execute` command should be executed. It can depend on other variables (for example one can have `DirectoryStructure = T_$(T)_Act_$(Activity)`). 
@@ -55,6 +55,7 @@ The `pyrla/examples/` folder contains commented pyrla input files that can be us
 	* `PostExecute`: a command that will be executed after `Execute` if and only if `Execute` exits with a zero exit code.
 	* `Relaunch`: if True relaunch jobs that return non-zero exit codes. Note that only the `Execute` command gets re-launched.
 	* `ContemporaryJobs`: maximum number of jobs to be executed together. This key may not contain expressions or list of values. If 0 then no max will be set. Defaults to 0.
+	* `RunConditions`: a list of comma-separated conditions that each job should be met in order to be run. Each condition should be a Python expression which can be based on the user-defined key values. However, note that by default all the keys are initialised as strings, so that numeric keys must be explicitly cast to numeric types if numeric comparisons are to be carried out. An example is `RunConditions = float(T) < 2, log(float(Activity)) > 1`.
 	* `WaitingTime`: waiting time (in seconds) between job launches. Defaults to 2 seconds.
 	* `Subdirectories`: one or more directories (separated by spaces) to be created from each job under the DirectoryStructure folder. An example: `Subdirectories = confs sus/special` will create two folders under the job's working directory (determined by `DirectoryStructure``): confs and sus. In addition, a directory called "special" under the sus folder will be created.
 	* `Times`: how many times the jobs must be executed.
@@ -88,6 +89,10 @@ If `InputType = LAMMPS` then pyrla will expect a LAMMPS input file. In this case
 ### Jinja2 templates
 
 If `InputType = Jinja2` then pyrla will expect a [Jinja2](https://palletsprojects.com/p/jinja/) template file. In this case the values associated to the keys specified in `CopyToWrite` will be passed to the Jinja template. This feature requires the `jinja2` python package to be installed.
+
+## A security warning
+
+Note that the evaluation of math keys and run conditions require the use of Python's `eval` function, which is [known to be insecure](https://softwareengineering.stackexchange.com/a/311510). Be careful.
 	
 ## Acknowledgements
 
