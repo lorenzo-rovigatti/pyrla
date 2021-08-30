@@ -15,5 +15,5 @@ Delta = 0.2 @@ T = 0.1
 Delta = 0.3 @@ T = 0.4, Activity = 2e-5
 Epsilon = ${$(Delta)*2}
 
-Execute = echo "Job N. $(JOB_ID): I'm working at $(T) temperature, $(Delta) Delta and $(Epsilon) Epsilon"
+Execute = echo "Job N. $(JOB_ID): I'm working at T = $(T), Activity = $(Activity), Delta = $(Delta) and Epsilon = $(Epsilon)"
 WaitingTime = 0
