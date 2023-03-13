@@ -34,6 +34,8 @@ import collections
 from time import sleep
 # used to process mathematical expressions
 from math import * #@UnusedWildImport
+import numpy as np #@UnusedImport
+import random #@UnusedImport
 
 try:
     import jinja2
